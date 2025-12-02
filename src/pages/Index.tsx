@@ -1,13 +1,21 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { Helmet } from 'react-helmet-async';
+import { Layout } from '@/components/Layout';
+import { DemoBuilder } from '@/components/DemoBuilder/DemoBuilder';
 
 const Index = () => {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
+    <>
+      <Helmet>
+        <title>Flowtide - Create Interactive Product Demos</title>
+        <meta
+          name="description"
+          content="Build beautiful, interactive product demos in minutes. Record screens, add annotations, and share with your team."
+        />
+      </Helmet>
+      <Layout>
+        <DemoBuilder />
+      </Layout>
+    </>
   );
 };
 
