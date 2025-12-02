@@ -177,27 +177,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const connectIntegration = useCallback(async (integrationId: string) => {
-    setIntegrations((prev) =>
-      prev.map((int) =>
-        int.id === integrationId ? { ...int, status: 'connecting' } : int
-      )
-    );
+    const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
-    // Simulate OAuth flow delay
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+if (currentAttempts === 0) {
+  // First attempt always fails
+  setIntegrations((prev) =>
+    prev.map((int) =>
+      int.id === integrationId ? { ...int, status: 'error' } : int
+    )
+  );
 
-    // Always fail for demo purposes
-    setIntegrations((prev) =>
-      prev.map((int) =>
-        int.id === integrationId ? { ...int, status: 'error' } : int
-      )
-    );
+  const integration = integrations.find((int) => int.id === integrationId);
+  setIntegrationError({
+    id: integrationId,
+    message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.`,
+  });
+} else {
+  // Second attempt succeeds
+  setIntegrations((prev) =>
+    prev.map((int) =>
+      int.id === integrationId ? { ...int, status: 'connected' } : int
+    )
+  );
+  setIntegrationError(null);
+}
 
-    const integration = integrations.find((int) => int.id === integrationId);
-    setIntegrationError({
-      id: integrationId,
-      message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.`,
-    });
+// Update attempt count
+updateUserSession({
+  integrationAttempts: {
+    ...userSession.integrationAttempts,
+    [integrationId]: {
+      attempts: currentAttempts + 1,
+      escalated: currentAttempts >= 1,
+    },
+  },
+});
+
   }, [integrations]);
 
   const clearIntegrationError = useCallback(() => {
