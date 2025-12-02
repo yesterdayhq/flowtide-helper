@@ -207,7 +207,7 @@ export function ChatWidget() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 10 }}
         transition={{ duration: 0.3 }}
-        className="fixed bottom-20 right-6 z-50 max-w-xs rounded-lg bg-accent-foreground/90 px-4 py-3 text-sm text-accent-foreground shadow-lg"
+        className="fixed bottom-20 right-6 z-50 max-w-xs rounded-lg bg-white px-4 py-3 text-sm text-black shadow-lg"
       >
         {snippetMessage}
         <button
