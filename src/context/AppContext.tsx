@@ -335,9 +335,27 @@ updateUserSession({
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
-    const handleTrigger = async () => {
-      isProcessingRef.current = true;
-      const delay = () => new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
+    if (!userSession.greetingSentThisSession) {
+    setIsTyping(true);
+    await delay();
+    setIsTyping(false);
+
+    const greeting = !userSession.hasBeenIntroduced
+      ? `Hi ${userSession.userName}, I'm Lee!`
+      : `Hi ${userSession.userName}, nice to see you back!`;
+
+    addChatMessage({
+      role: 'assistant',
+      content: greeting,
+    });
+
+    updateUserSession({ 
+      hasBeenIntroduced: true,
+      greetingSentThisSession: true,
+    });
+
+    await delay();
+  }
 
       // Send greeting ONCE per session (not per trigger)
       if (!userSession.greetingSentThisSession) {
