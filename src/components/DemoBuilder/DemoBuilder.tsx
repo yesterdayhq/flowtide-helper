@@ -181,10 +181,10 @@ export function DemoBuilder() {
             <h3 className="mb-2 font-display text-xl font-semibold">
               Create your first demo
             </h3>
-            <p className="mb-6 text-muted-foreground">
-              Add steps to build an interactive product walkthrough. Upload
-              screenshots and add annotations to guide your viewers.
-            </p>
+           <p className="mb-6 text-muted-foreground">
+  Add steps to build an interactive product walkthrough. Upload
+  screenshots, add annotations, and more, to guide your viewers.
+</p>
             <Button onClick={handleAddStep} className="gap-2">
               <Plus className="h-4 w-4" />
               Add your first step
