@@ -86,9 +86,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   const isProcessingRef = useRef(false);
-  const messageQueueRef = useRef<Array<{ content: string; buttons?: ChatMessage['buttons'] }>>([]);
 
-  // 1️⃣ UPDATE USER SESSION - MUST BE DECLARED BEFORE ANY CALLBACKS THAT USE IT
+  // UPDATE USER SESSION
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
@@ -147,25 +146,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatMessages(prev => [...prev, newMessage]);
   }, []);
 
-  const sendMessageWithDelay = useCallback(async (content: string, buttons?: ChatMessage['buttons'], preDelay?: number, showAsSnippet = false) => {
-    const delayTime = preDelay ?? (3000 + Math.random() * 2000);
-    const delay = () => new Promise(r => setTimeout(r, delayTime));
-
-    if (showAsSnippet) {
-      setSnippetMessage(content);
-      setShowSnippet(true);
-      await delay();
-      setShowSnippet(false);
-      setSnippetMessage(null);
-    }
-
-    setIsTyping(true);
-    await delay();
-    setIsTyping(false);
-
-    addChatMessage({ role: 'assistant', content, buttons });
-  }, [addChatMessage]);
-
   const clearSnippet = useCallback(() => {
     setShowSnippet(false);
     setSnippetMessage(null);
@@ -205,51 +185,81 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsTyping(false);
     setPendingTrigger(null);
     isProcessingRef.current = false;
-    messageQueueRef.current = [];
     setShowSnippet(false);
     setSnippetMessage(null);
   }, []);
 
-  // HANDLE PENDING TRIGGERS
+  // HANDLE PENDING TRIGGERS (10s delay, chat first, floater second)
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
 
-      // Greeting once per session
+      // Pre-delay before first message
+      await new Promise((r) => setTimeout(r, 10000));
+
+      // Greeting
       if (!userSession.greetingSentThisSession) {
-        const greeting = !userSession.hasBeenIntroduced ? `Hi ${userSession.userName}, I'm Lee!` : `Hi ${userSession.userName}, nice to see you back!`;
-        await sendMessageWithDelay(greeting, undefined, 3000, true);
+        const greeting = !userSession.hasBeenIntroduced
+          ? `Hi ${userSession.userName}, I'm Lee!`
+          : `Hi ${userSession.userName}, nice to see you back!`;
+
+        addChatMessage({ role: 'assistant', content: greeting });
+        setSnippetMessage(greeting);
+        setShowSnippet(true);
+        await new Promise((r) => setTimeout(r, 3000));
+        setShowSnippet(false);
+
         updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
       }
 
-      // Contextual message
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [type, integrationId] = pendingTrigger.details.split(':');
-        if (type === 'integration') {
-          const integration = integrations.find(i => i.id === integrationId);
-          const integrationName = integration?.name || integrationId;
-          const attempts = userSession.integrationAttempts[integrationId];
+        const integration = integrations.find(i => i.id === integrationId);
+        const integrationName = integration?.name || integrationId;
+        const attempts = userSession.integrationAttempts[integrationId];
 
-          if (attempts?.escalated) {
-            await sendMessageWithDelay(`Got it — if it happens again, I'll escalate for help.`, undefined, 4000, true);
-          } else {
-            await sendMessageWithDelay(`It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`, undefined, 4000, true);
-          }
-        } else {
-          await sendMessageWithDelay(`I see an upload error on this step — can you try uploading the file once more?`, undefined, 4000, true);
-        }
+        const errorMsg = attempts?.escalated
+          ? `Got it — if it happens again, I'll escalate for help.`
+          : `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
+
+        addChatMessage({ role: 'assistant', content: errorMsg });
+        setSnippetMessage(errorMsg);
+        setShowSnippet(true);
+        await new Promise((r) => setTimeout(r, 3000));
+        setShowSnippet(false);
       } else if (pendingTrigger.type === 'stuck') {
-        await sendMessageWithDelay(`Noticed you might be stuck. Want a quick tip?`, [
-          { label: 'Yes, show me a tip', action: 'show_tip' },
-          { label: "No, I'm good", action: 'decline_help' },
-        ], 4000, true);
+        const stuckMsg = `Noticed you might be stuck. Want a quick tip?`;
+        addChatMessage({
+          role: 'assistant',
+          content: stuckMsg,
+          buttons: [
+            { label: 'Yes, show me a tip', action: 'show_tip' },
+            { label: "No, I'm good", action: 'decline_help' },
+          ],
+        });
+
+        setSnippetMessage(stuckMsg);
+        setShowSnippet(true);
+        await new Promise((r) => setTimeout(r, 3000));
+        setShowSnippet(false);
       } else if (pendingTrigger.type === 'happy') {
-        await sendMessageWithDelay(`Congrats on making your first demo! 🎉 Want me to schedule a quick call to help you get more value?`, [
-          { label: 'Schedule a call', action: 'schedule_call' },
-          { label: 'Send me tips instead', action: 'send_tips' },
-        ], 4000, true);
+        const happyMsg = `Congrats on making your first demo! 🎉 Want me to schedule a quick call to help you get more value?`;
+        addChatMessage({
+          role: 'assistant',
+          content: happyMsg,
+          buttons: [
+            { label: 'Schedule a call', action: 'schedule_call' },
+            { label: 'Send me tips instead', action: 'send_tips' },
+          ],
+        });
+
+        setSnippetMessage(happyMsg);
+        setShowSnippet(true);
+        await new Promise((r) => setTimeout(r, 3000));
+        setShowSnippet(false);
+
         updateUserSession({ firstDemoCompleted: true });
       }
 
@@ -258,7 +268,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     handleTrigger();
-  }, [pendingTrigger, userSession, integrations, sendMessageWithDelay, updateUserSession]);
+  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession]);
 
   return (
     <AppContext.Provider
