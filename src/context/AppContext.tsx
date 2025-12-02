@@ -107,10 +107,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     type: 'error' | 'stuck' | 'happy';
     details?: string;
   } | null>(null);
-
+  
   const isProcessingRef = useRef(false);
   const messageQueueRef = useRef<Array<{ content: string; buttons?: ChatMessage['buttons'] }>>([]);
 
+  // ------------------------------
+  // User session updater (must be first)
+  // ------------------------------
+  const updateUserSession = useCallback((updates: Partial<UserSession>) => {
+    setUserSession((prev) => ({ ...prev, ...updates }));
+  }, []);
+
+  // ------------------------------
+  // Demo manipulation functions
+  // ------------------------------
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
     setDemo((prev) => {
       if (!prev) return prev;
@@ -176,6 +186,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // ------------------------------
+  // Integrations
+  // ------------------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
     const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
@@ -218,10 +231,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIntegrationError(null);
   }, []);
 
-  const updateUserSession = useCallback((updates: Partial<UserSession>) => {
-    setUserSession((prev) => ({ ...prev, ...updates }));
-  }, []);
-
+  // ------------------------------
+  // Chat helpers
+  // ------------------------------
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = {
       ...message,
@@ -232,15 +244,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const sendMessageWithDelay = useCallback(async (
-    content: string,
-    buttons?: ChatMessage['buttons'],
+    content: string, 
+    buttons?: ChatMessage['buttons'], 
     preDelay?: number
   ) => {
+    // Use preDelay if provided, otherwise default 3-5s
     const delayTime = preDelay ?? (3000 + Math.random() * 2000);
-    await new Promise((r) => setTimeout(r, delayTime));
+    const delay = () => new Promise((r) => setTimeout(r, delayTime));
 
     setIsTyping(true);
-    await new Promise((r) => setTimeout(r, 500 + Math.random() * 1500)); // typing duration
+    await delay();
     setIsTyping(false);
 
     addChatMessage({
@@ -250,6 +263,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
   }, [addChatMessage]);
 
+  // ------------------------------
+  // Triggers
+  // ------------------------------
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
 
@@ -318,36 +334,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     messageQueueRef.current = [];
   }, []);
 
+  // ------------------------------
+  // Handle pending triggers
+  // ------------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
 
-      // Pre-delay before any typing or chat (10-15s)
-      const preDelay = 10000 + Math.random() * 5000;
-      await new Promise((r) => setTimeout(r, preDelay));
-
-      const delay = () => new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
+      // Wait 10-15s before first message
+      await new Promise((r) => setTimeout(r, 10000 + Math.random() * 5000));
 
       // Send greeting ONCE per session
       if (!userSession.greetingSentThisSession) {
-        setIsTyping(true);
-        await delay();
-        setIsTyping(false);
-
         const greeting = !userSession.hasBeenIntroduced
           ? `Hi ${userSession.userName}, I'm Lee!`
           : `Hi ${userSession.userName}, nice to see you back!`;
 
-        addChatMessage({ role: 'assistant', content: greeting });
+        await sendMessageWithDelay(greeting);
 
         updateUserSession({
           hasBeenIntroduced: true,
           greetingSentThisSession: true,
         });
-
-        await delay();
       }
 
       // Context-specific message
@@ -426,11 +436,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       setPendingTrigger(null);
       isProcessingRef.current = false;
-      setIsChatOpen(true); // Only open chat after pre-delay and typing
     };
 
     handleTrigger();
-  }, [pendingTrigger, userSession, addChatMessage, updateUserSession, integrations, sendMessageWithDelay]);
+  }, [pendingTrigger, userSession, sendMessageWithDelay, updateUserSession, integrations]);
 
   return (
     <AppContext.Provider
