@@ -28,8 +28,10 @@ interface AppContextType {
   setIsTyping: (typing: boolean) => void;
   isChatOpen: boolean;
   setIsChatOpen: (open: boolean) => void;
-  incomingToast: { content: string } | null;
-  clearIncomingToast: () => void;
+
+  // Snippet/Floater
+  incomingToast: { content: string; buttons?: ChatMessage['buttons'] } | null;
+  enqueueMessage: (content: string, buttons?: ChatMessage['buttons']) => void;
 
   // Triggers for HappyLead
   triggerError: (type: 'integration' | 'upload', details: string) => void;
@@ -64,30 +66,20 @@ const defaultUserSession: UserSession = {
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
-  const [demo, setDemo] = useState<Demo | null>({
-    id: '1',
-    title: 'My First Demo',
-    steps: [],
-    isPublished: false,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  });
-
+  const [demo, setDemo] = useState<Demo | null>({ id: '1', title: 'My First Demo', steps: [], isPublished: false, createdAt: new Date(), updatedAt: new Date() });
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [integrationError, setIntegrationError] = useState<{ id: string; message: string } | null>(null);
   const [userSession, setUserSession] = useState<UserSession>(defaultUserSession);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-  const [incomingToast, setIncomingToast] = useState<{ content: string } | null>(null);
-
   const [pendingTrigger, setPendingTrigger] = useState<{ type: 'error' | 'stuck' | 'happy'; details?: string } | null>(null);
+  const [incomingToast, setIncomingToast] = useState<{ content: string; buttons?: ChatMessage['buttons'] } | null>(null);
 
   const isProcessingRef = useRef(false);
+  const messageQueueRef = useRef<Array<{ content: string; buttons?: ChatMessage['buttons'] }>>([]);
 
-  // -------------------
-  // Demo helpers
-  // -------------------
+  // ------------------ Demo step functions ------------------
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
     setDemo((prev) => {
       if (!prev) return prev;
@@ -99,22 +91,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const updateStep = useCallback((stepId: string, updates: Partial<DemoStep>) => {
     setDemo((prev) => {
       if (!prev) return prev;
-      return { ...prev, steps: prev.steps.map((s) => s.id === stepId ? { ...s, ...updates } : s), updatedAt: new Date() };
+      return { ...prev, steps: prev.steps.map((step) => step.id === stepId ? { ...step, ...updates } : step), updatedAt: new Date() };
     });
   }, []);
 
   const removeStep = useCallback((stepId: string) => {
     setDemo((prev) => {
       if (!prev) return prev;
-      const filtered = prev.steps.filter((s) => s.id !== stepId);
-      return { ...prev, steps: filtered.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() };
+      const filtered = prev.steps.filter((step) => step.id !== stepId);
+      return { ...prev, steps: filtered.map((step, index) => ({ ...step, order: index + 1 })), updatedAt: new Date() };
     });
   }, []);
 
   const reorderSteps = useCallback((newOrder: DemoStep[]) => {
     setDemo((prev) => {
       if (!prev) return prev;
-      return { ...prev, steps: newOrder.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() };
+      return { ...prev, steps: newOrder.map((step, index) => ({ ...step, order: index + 1 })), updatedAt: new Date() };
     });
   }, []);
 
@@ -122,21 +114,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
-  // -------------------
-  // Integration helpers
-  // -------------------
-  const updateUserSession = useCallback((updates: Partial<UserSession>) => {
-    setUserSession((prev) => ({ ...prev, ...updates }));
-  }, []);
-
+  // ------------------ Integration logic ------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
     const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
     if (currentAttempts === 0) {
+      // First attempt always fails
       setIntegrations((prev) => prev.map((int) => int.id === integrationId ? { ...int, status: 'error' } : int));
-      const integration = integrations.find((int) => int.id === integrationId);
+      const integration = integrations.find((i) => i.id === integrationId);
       setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.` });
     } else {
+      // Second attempt succeeds
       setIntegrations((prev) => prev.map((int) => int.id === integrationId ? { ...int, status: 'connected' } : int));
       setIntegrationError(null);
     }
@@ -150,69 +138,99 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, [integrations, userSession.integrationAttempts, updateUserSession]);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
+  const updateUserSession = useCallback((updates: Partial<UserSession>) => setUserSession((prev) => ({ ...prev, ...updates })), []);
 
-  // -------------------
-  // Chat helpers
-  // -------------------
+  // ------------------ Chat logic ------------------
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages((prev) => [...prev, newMessage]);
-    // Show floating preview if chat is closed
-    if (!isChatOpen) setIncomingToast({ content: message.content });
-  }, [isChatOpen]);
+  }, []);
 
-  const clearIncomingToast = useCallback(() => setIncomingToast(null), []);
+  const enqueueMessage = useCallback((content: string, buttons?: ChatMessage['buttons']) => {
+    messageQueueRef.current.push({ content, buttons });
+  }, []);
 
-  const sendMessageWithDelay = useCallback(async (content: string, buttons?: ChatMessage['buttons'], preDelay?: number) => {
-    const delayTime = preDelay ?? 3000 + Math.random() * 2000;
-    await new Promise((r) => setTimeout(r, delayTime));
-    addChatMessage({ role: 'assistant', content, buttons });
-  }, [addChatMessage]);
+  // Process message queue
+  useEffect(() => {
+    if (isProcessingRef.current) return;
+    if (messageQueueRef.current.length === 0) return;
 
-  // -------------------
-  // Triggers
-  // -------------------
+    const processQueue = async () => {
+      isProcessingRef.current = true;
+      const message = messageQueueRef.current.shift();
+      if (!message) { isProcessingRef.current = false; return; }
+
+      // Show snippet/floater first
+      setIncomingToast(message);
+
+      // Randomized delay before starting full message
+      const preDelay = 10000 + Math.random() * 5000;
+      await new Promise((r) => setTimeout(r, preDelay));
+
+      setIncomingToast(null); // Hide snippet
+      setIsChatOpen(true); // Open chat for full message
+      setIsTyping(true);
+      const typingDelay = 3000 + Math.random() * 2000;
+      await new Promise((r) => setTimeout(r, typingDelay));
+      setIsTyping(false);
+
+      addChatMessage({ role: 'assistant', content: message.content, buttons: message.buttons });
+      isProcessingRef.current = false;
+    };
+
+    processQueue();
+  }, [chatMessages, addChatMessage]);
+
+  // ------------------ Triggers ------------------
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
 
-    let integrationName: string | undefined;
     if (type === 'integration') {
-      const integration = integrations.find((i) => i.id === details);
-      integrationName = integration?.name;
-      const currentAttempts = userSession.integrationAttempts[details];
-      if (currentAttempts?.escalated) return;
+      const integrationId = details;
+      const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
+      if (currentAttempts >= 2) return; // already escalated
 
-      const newAttempts: IntegrationAttempt = {
-        integrationId: details,
-        attempts: (currentAttempts?.attempts || 0) + 1,
-        lastAttempt: new Date(),
-        escalated: (currentAttempts?.attempts || 0) >= 1,
-      };
-      updateUserSession({ integrationAttempts: { ...userSession.integrationAttempts, [details]: newAttempts } });
+      updateUserSession({
+        integrationAttempts: {
+          ...userSession.integrationAttempts,
+          [integrationId]: { attempts: currentAttempts + 1, escalated: currentAttempts >= 1 },
+        },
+      });
+
+      const integration = integrations.find((i) => i.id === integrationId);
+      const integrationName = integration?.name || integrationId;
+
+      enqueueMessage(currentAttempts >= 1
+        ? `Got it — if it happens again, let me know and I'll get someone from our team to help troubleshoot.`
+        : `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`
+      );
+    } else {
+      enqueueMessage(`I see an upload error on this step — can you try uploading the file once more?`);
     }
-
-    setPendingTrigger({ type: type === 'integration' ? 'error' : type, details: integrationName || details });
-    setIsChatOpen(true);
-  }, [integrations, userSession.integrationAttempts, updateUserSession]);
+  }, [userSession.integrationAttempts, integrations, enqueueMessage, updateUserSession]);
 
   const triggerStuck = useCallback((stepId: string) => {
     if (isProcessingRef.current) return;
     if (userSession.stuckPromptedSteps.includes(stepId)) return;
+
     updateUserSession({ stuckPromptedSteps: [...userSession.stuckPromptedSteps, stepId] });
-    setPendingTrigger({ type: 'stuck', details: stepId });
-    setIsChatOpen(true);
-  }, [userSession.stuckPromptedSteps, updateUserSession]);
+    enqueueMessage(`Noticed you might be stuck. Want a quick tip?`, [
+      { label: 'Yes, show me a tip', action: 'show_tip' },
+      { label: "No, I'm good", action: 'decline_help' },
+    ]);
+  }, [userSession.stuckPromptedSteps, enqueueMessage, updateUserSession]);
 
   const triggerHappyMoment = useCallback(() => {
     if (isProcessingRef.current) return;
     if (userSession.firstDemoCompleted) return;
-    setPendingTrigger({ type: 'happy' });
-    setIsChatOpen(true);
-  }, [userSession.firstDemoCompleted]);
 
-  // -------------------
-  // Reset
-  // -------------------
+    updateUserSession({ firstDemoCompleted: true });
+    enqueueMessage(`Congrats on making your first demo! 🎉 Would you like me to schedule a quick call to help you get more value from this?`, [
+      { label: 'Schedule a call', action: 'schedule_call' },
+      { label: 'Send me tips instead', action: 'send_tips' },
+    ]);
+  }, [userSession.firstDemoCompleted, enqueueMessage, updateUserSession]);
+
   const resetDemo = useCallback(() => {
     setDemo({ id: crypto.randomUUID(), title: 'My First Demo', steps: [], isPublished: false, createdAt: new Date(), updatedAt: new Date() });
     setIntegrations(defaultIntegrations);
@@ -220,103 +238,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUserSession({ ...defaultUserSession, hasBeenIntroduced: false, greetingSentThisSession: false });
     setChatMessages([]);
     setIsTyping(false);
+    setIsChatOpen(false);
     setPendingTrigger(null);
-    isProcessingRef.current = false;
     setIncomingToast(null);
+    isProcessingRef.current = false;
+    messageQueueRef.current = [];
   }, []);
 
-  // -------------------
-  // Handle pending triggers
-  // -------------------
-  useEffect(() => {
-    if (!pendingTrigger || isProcessingRef.current) return;
-
-    const handleTrigger = async () => {
-      isProcessingRef.current = true;
-
-      // Greeting first
-      if (!userSession.greetingSentThisSession) {
-        const delayTime = 10000 + Math.random() * 5000; // 10-15s before first message
-        setIsTyping(true);
-        await new Promise((r) => setTimeout(r, delayTime));
-        setIsTyping(false);
-
-        const greeting = !userSession.hasBeenIntroduced
-          ? `Hi ${userSession.userName}, I'm Lee!`
-          : `Hi ${userSession.userName}, nice to see you back!`;
-
-        addChatMessage({ role: 'assistant', content: greeting });
-        updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
-      }
-
-      // Handle type-specific messages
-      if (pendingTrigger.type === 'error') {
-        const integrationName = pendingTrigger.details;
-        const attempts = Object.values(userSession.integrationAttempts).find(a => a.integrationId === integrationName);
-        if (attempts?.escalated) {
-          await sendMessageWithDelay(`Got it — if it happens again, let me know and I'll get someone from our team to help troubleshoot.`);
-        } else {
-          await sendMessageWithDelay(`It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`);
-        }
-        updateUserSession({
-          activeThread: { id: crypto.randomUUID(), type: 'error', integrationName: integrationName, awaitingResponse: true, resolved: false, followUpSent: false },
-        });
-      } else if (pendingTrigger.type === 'stuck') {
-        await sendMessageWithDelay(`Noticed you might be stuck. Want a quick tip?`, [
-          { label: 'Yes, show me a tip', action: 'show_tip' },
-          { label: "No, I'm good", action: 'decline_help' },
-        ]);
-        updateUserSession({
-          activeThread: { id: crypto.randomUUID(), type: 'stuck', stepId: pendingTrigger.details, awaitingResponse: true, resolved: false, followUpSent: false },
-        });
-      } else if (pendingTrigger.type === 'happy') {
-        await sendMessageWithDelay(`Congrats on making your first demo! 🎉 Would you like me to schedule a quick call to help you get more value from this?`, [
-          { label: 'Schedule a call', action: 'schedule_call' },
-          { label: 'Send me tips instead', action: 'send_tips' },
-        ]);
-        updateUserSession({
-          firstDemoCompleted: true,
-          activeThread: { id: crypto.randomUUID(), type: 'happy', awaitingResponse: true, resolved: false, followUpSent: false },
-        });
-      }
-
-      setPendingTrigger(null);
-      isProcessingRef.current = false;
-    };
-
-    handleTrigger();
-  }, [pendingTrigger, userSession, addChatMessage, updateUserSession, sendMessageWithDelay]);
-
   return (
-    <AppContext.Provider
-      value={{
-        demo,
-        setDemo,
-        addStep,
-        updateStep,
-        removeStep,
-        reorderSteps,
-        publishDemo,
-        integrations,
-        connectIntegration,
-        integrationError,
-        clearIntegrationError,
-        userSession,
-        updateUserSession,
-        chatMessages,
-        addChatMessage,
-        isTyping,
-        setIsTyping,
-        isChatOpen,
-        setIsChatOpen,
-        incomingToast,
-        clearIncomingToast,
-        triggerError,
-        triggerStuck,
-        triggerHappyMoment,
-        resetDemo,
-      }}
-    >
+    <AppContext.Provider value={{
+      demo, setDemo, addStep, updateStep, removeStep, reorderSteps, publishDemo,
+      integrations, connectIntegration, integrationError, clearIntegrationError,
+      userSession, updateUserSession, chatMessages, addChatMessage,
+      isTyping, setIsTyping, isChatOpen, setIsChatOpen,
+      incomingToast, enqueueMessage,
+      triggerError, triggerStuck, triggerHappyMoment,
+      resetDemo,
+    }}>
       {children}
     </AppContext.Provider>
   );
