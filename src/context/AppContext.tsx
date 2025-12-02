@@ -233,19 +233,25 @@ updateUserSession({
   }, []);
 
   // Helper to send message with typing delay
-  const sendMessageWithDelay = useCallback(async (content: string, buttons?: ChatMessage['buttons']) => {
-    const delay = () => new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
-    
-    setIsTyping(true);
-    await delay();
-    setIsTyping(false);
-    
-    addChatMessage({
-      role: 'assistant',
-      content,
-      buttons,
-    });
-  }, [addChatMessage]);
+  const sendMessageWithDelay = useCallback(async (
+  content: string, 
+  buttons?: ChatMessage['buttons'], 
+  preDelay?: number
+) => {
+  // Use preDelay if provided, otherwise default 3-5s
+  const delayTime = preDelay ?? (3000 + Math.random() * 2000);
+  const delay = () => new Promise((r) => setTimeout(r, delayTime));
+
+  setIsTyping(true);
+  await delay();
+  setIsTyping(false);
+
+  addChatMessage({
+    role: 'assistant',
+    content,
+    buttons,
+  });
+}, [addChatMessage]);
 
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     // Check if we're already processing or have an active thread
