@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
-import { Demo, DemoStep, Integration, UserSession, ChatMessage } from '@/types/demo';
+import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
+import { Demo, DemoStep, Integration, UserSession, ChatMessage, ActiveThread, IntegrationAttempt } from '@/types/demo';
 
 interface AppContextType {
   // Demo state
@@ -68,9 +68,15 @@ const defaultIntegrations: Integration[] = [
 const defaultUserSession: UserSession = {
   userName: 'Alex',
   hasBeenIntroduced: false,
+  greetingSentThisSession: false,
   lastInteraction: null,
   firstDemoCompleted: false,
   currentPage: 'builder',
+  currentStep: null,
+  lastInstruction: null,
+  activeThread: null,
+  integrationAttempts: {},
+  stuckPromptedSteps: [],
   stuckDetection: {
     stepId: null,
     dwellStart: null,
@@ -101,6 +107,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     type: 'error' | 'stuck' | 'happy';
     details?: string;
   } | null>(null);
+  
+  const isProcessingRef = useRef(false);
+  const messageQueueRef = useRef<Array<{ content: string; buttons?: ChatMessage['buttons'] }>>([]);
 
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
     setDemo((prev) => {
@@ -208,20 +217,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setChatMessages((prev) => [...prev, newMessage]);
   }, []);
 
+  // Helper to send message with typing delay
+  const sendMessageWithDelay = useCallback(async (content: string, buttons?: ChatMessage['buttons']) => {
+    const delay = () => new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
+    
+    setIsTyping(true);
+    await delay();
+    setIsTyping(false);
+    
+    addChatMessage({
+      role: 'assistant',
+      content,
+      buttons,
+    });
+  }, [addChatMessage]);
+
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
+    // Check if we're already processing or have an active thread
+    if (isProcessingRef.current) return;
+    
+    // For integrations, track attempts
+    if (type === 'integration') {
+      const integrationId = details;
+      const currentAttempts = userSession.integrationAttempts[integrationId];
+      
+      // If already escalated, don't trigger again
+      if (currentAttempts?.escalated) return;
+      
+      // Update attempts
+      const newAttempts: IntegrationAttempt = {
+        integrationId,
+        attempts: (currentAttempts?.attempts || 0) + 1,
+        lastAttempt: new Date(),
+        escalated: (currentAttempts?.attempts || 0) >= 1, // Escalate on 2nd attempt
+      };
+      
+      updateUserSession({
+        integrationAttempts: {
+          ...userSession.integrationAttempts,
+          [integrationId]: newAttempts,
+        },
+      });
+    }
+    
     setPendingTrigger({ type: 'error', details: `${type}:${details}` });
     setIsChatOpen(true);
-  }, []);
+  }, [userSession.integrationAttempts, updateUserSession]);
 
   const triggerStuck = useCallback((stepId: string) => {
+    // Don't trigger if already prompted for this step or processing
+    if (isProcessingRef.current) return;
+    if (userSession.stuckPromptedSteps.includes(stepId)) return;
+    
+    // Mark step as prompted
+    updateUserSession({
+      stuckPromptedSteps: [...userSession.stuckPromptedSteps, stepId],
+    });
+    
     setPendingTrigger({ type: 'stuck', details: stepId });
     setIsChatOpen(true);
-  }, []);
+  }, [userSession.stuckPromptedSteps, updateUserSession]);
 
   const triggerHappyMoment = useCallback(() => {
+    // Don't trigger if already completed or processing
+    if (isProcessingRef.current) return;
+    if (userSession.firstDemoCompleted) return;
+    
     setPendingTrigger({ type: 'happy' });
     setIsChatOpen(true);
-  }, []);
+  }, [userSession.firstDemoCompleted]);
 
   const resetDemo = useCallback(() => {
     setDemo({
@@ -237,101 +301,129 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setUserSession({
       ...defaultUserSession,
       hasBeenIntroduced: false,
+      greetingSentThisSession: false,
     });
     setChatMessages([]);
     setIsTyping(false);
     setPendingTrigger(null);
+    isProcessingRef.current = false;
+    messageQueueRef.current = [];
   }, []);
 
   // Handle pending triggers
   useEffect(() => {
-    if (!pendingTrigger) return;
+    if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
+      isProcessingRef.current = true;
       const delay = () => new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
 
-      setIsTyping(true);
-      await delay();
-      setIsTyping(false);
+      // Send greeting ONCE per session (not per trigger)
+      if (!userSession.greetingSentThisSession) {
+        setIsTyping(true);
+        await delay();
+        setIsTyping(false);
 
-      // Introduction message if needed
-      if (!userSession.hasBeenIntroduced) {
-        const introVariants = [
-          `Hey ${userSession.userName}, I'm Lee, a junior AE with Flowtide!`,
-          `Hi ${userSession.userName} — Lee from Flowtide here!`,
-        ];
+        const greeting = !userSession.hasBeenIntroduced
+          ? `Hi ${userSession.userName}, I'm Lee!`
+          : `Hi ${userSession.userName}, nice to see you back!`;
+        
         addChatMessage({
           role: 'assistant',
-          content: introVariants[Math.floor(Math.random() * introVariants.length)],
+          content: greeting,
         });
-        updateUserSession({ hasBeenIntroduced: true });
-        await delay();
-        setIsTyping(true);
-        await delay();
-        setIsTyping(false);
-      } else {
-        const returningIntros = [
-          `Hey ${userSession.userName}, Lee again 😅`,
-          `Hi ${userSession.userName}, nice to see you back!`,
-        ];
-        addChatMessage({
-          role: 'assistant',
-          content: returningIntros[Math.floor(Math.random() * returningIntros.length)],
+        
+        updateUserSession({ 
+          hasBeenIntroduced: true,
+          greetingSentThisSession: true,
         });
+        
         await delay();
-        setIsTyping(true);
-        await delay();
-        setIsTyping(false);
       }
 
       // Context-specific message
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
-        const [type, name] = pendingTrigger.details.split(':');
+        const [type, integrationId] = pendingTrigger.details.split(':');
+        
         if (type === 'integration') {
-          const errorVariants = [
-            `It looks like you ran into an error while connecting ${name}. Can you try connecting it again?`,
-            `Hmm — I see an error on the Integrations page. Can you try connecting ${name} one more time?`,
-          ];
-          addChatMessage({
-            role: 'assistant',
-            content: errorVariants[Math.floor(Math.random() * errorVariants.length)],
+          const integration = integrations.find((i) => i.id === integrationId);
+          const integrationName = integration?.name || integrationId;
+          const attempts = userSession.integrationAttempts[integrationId];
+          
+          if (attempts?.escalated) {
+            // Second attempt - escalate
+            await sendMessageWithDelay(
+              `Got it — if it happens again, let me know and I'll get someone from our team to help troubleshoot.`
+            );
+          } else {
+            // First attempt - suggest retry
+            await sendMessageWithDelay(
+              `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`
+            );
+          }
+          
+          // Set active thread
+          updateUserSession({
+            activeThread: {
+              id: crypto.randomUUID(),
+              type: 'error',
+              integrationName,
+              awaitingResponse: true,
+              resolved: false,
+              followUpSent: false,
+            },
           });
         } else {
-          addChatMessage({
-            role: 'assistant',
-            content: `I see an upload error on this step — can you try uploading the file once more?`,
-          });
+          await sendMessageWithDelay(
+            `I see an upload error on this step — can you try uploading the file once more?`
+          );
         }
       } else if (pendingTrigger.type === 'stuck') {
-        const stuckVariants = [
-          `Noticed you might be stuck on this step. Want a quick tip to move forward?`,
-          `Need a hand finishing this step?`,
-        ];
-        addChatMessage({
-          role: 'assistant',
-          content: stuckVariants[Math.floor(Math.random() * stuckVariants.length)],
-          buttons: [
+        await sendMessageWithDelay(
+          `Noticed you might be stuck. Want a quick tip?`,
+          [
             { label: 'Yes, show me a tip', action: 'show_tip' },
             { label: "No, I'm good", action: 'decline_help' },
-          ],
+          ]
+        );
+        
+        updateUserSession({
+          activeThread: {
+            id: crypto.randomUUID(),
+            type: 'stuck',
+            stepId: pendingTrigger.details,
+            awaitingResponse: true,
+            resolved: false,
+            followUpSent: false,
+          },
         });
       } else if (pendingTrigger.type === 'happy') {
-        addChatMessage({
-          role: 'assistant',
-          content: `Congrats on making your first demo! 🎉 Would you like me to schedule a quick call to help you get more value from this?`,
-          buttons: [
+        await sendMessageWithDelay(
+          `Congrats on making your first demo! 🎉 Would you like me to schedule a quick call to help you get more value from this?`,
+          [
             { label: 'Schedule a call', action: 'schedule_call' },
             { label: 'Send me tips instead', action: 'send_tips' },
-          ],
+          ]
+        );
+        
+        updateUserSession({ 
+          firstDemoCompleted: true,
+          activeThread: {
+            id: crypto.randomUUID(),
+            type: 'happy',
+            awaitingResponse: true,
+            resolved: false,
+            followUpSent: false,
+          },
         });
-        updateUserSession({ firstDemoCompleted: true });
       }
 
       setPendingTrigger(null);
+      isProcessingRef.current = false;
     };
 
     handleTrigger();
-  }, [pendingTrigger, userSession, addChatMessage, updateUserSession]);
+  }, [pendingTrigger, userSession, addChatMessage, updateUserSession, integrations, sendMessageWithDelay]);
 
   return (
     <AppContext.Provider

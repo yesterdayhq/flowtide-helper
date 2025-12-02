@@ -3,23 +3,21 @@ import { useApp } from '@/context/AppContext';
 
 interface UseStuckDetectionOptions {
   stepId: string | null;
-  dwellThreshold?: number; // ms
-  clickThreshold?: number;
+  dwellThreshold?: number; // ms - 20 seconds
+  clickThreshold?: number; // 6+ clicks
 }
 
 export function useStuckDetection({
   stepId,
   dwellThreshold = 20000, // 20 seconds
-  clickThreshold = 5,
+  clickThreshold = 6, // 6 repeated clicks
 }: UseStuckDetectionOptions) {
-  const { triggerStuck, userSession, updateUserSession } = useApp();
-  const mouseMovementRef = useRef(false);
+  const { triggerStuck, userSession } = useApp();
   const clickCountRef = useRef(0);
   const dwellStartRef = useRef<Date | null>(null);
   const hasTriggeredRef = useRef(false);
 
   const resetDetection = useCallback(() => {
-    mouseMovementRef.current = false;
     clickCountRef.current = 0;
     dwellStartRef.current = null;
     hasTriggeredRef.current = false;
@@ -28,44 +26,43 @@ export function useStuckDetection({
   useEffect(() => {
     if (!stepId) return;
 
-    dwellStartRef.current = new Date();
+    // Don't trigger if already prompted for this step
+    if (userSession.stuckPromptedSteps?.includes(stepId)) {
+      return;
+    }
 
-    const handleMouseMove = () => {
-      mouseMovementRef.current = true;
-    };
+    dwellStartRef.current = new Date();
 
     const handleClick = () => {
       clickCountRef.current += 1;
-      
-      // Check for rage clicks (many clicks in short time)
+
+      // Trigger on 6+ repeated clicks
       if (clickCountRef.current >= clickThreshold && !hasTriggeredRef.current) {
         hasTriggeredRef.current = true;
         triggerStuck(stepId);
       }
     };
 
-    // Check for dwell time + mouse movement
+    // Check for dwell time (20s) - no mouse movement requirement
     const checkStuck = setInterval(() => {
       if (!dwellStartRef.current || hasTriggeredRef.current) return;
 
       const dwellTime = new Date().getTime() - dwellStartRef.current.getTime();
-      
-      if (dwellTime >= dwellThreshold && mouseMovementRef.current) {
+
+      if (dwellTime >= dwellThreshold) {
         hasTriggeredRef.current = true;
         triggerStuck(stepId);
       }
     }, 5000);
 
-    document.addEventListener('mousemove', handleMouseMove);
     document.addEventListener('click', handleClick);
 
     return () => {
-      document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('click', handleClick);
       clearInterval(checkStuck);
       resetDetection();
     };
-  }, [stepId, dwellThreshold, clickThreshold, triggerStuck, resetDetection]);
+  }, [stepId, dwellThreshold, clickThreshold, triggerStuck, resetDetection, userSession.stuckPromptedSteps]);
 
   return { resetDetection };
 }
