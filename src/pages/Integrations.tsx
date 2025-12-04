@@ -165,14 +165,32 @@ const Integrations = () => {
                 <IntegrationCard
                   integration={integration}
                   onConnect={() => {
-                    clearIntegrationError();
+  clearIntegrationError();
 
-                    // Trigger Lee flow and prevent Salesforce connection
-                    const result = triggerIntegrationFlow(integration.name);
-                    if (result !== 'neverWorks') {
-                      connectIntegration(integration.id);
-                    }
-                  }}
+  const nameLower = integration.name.toLowerCase();
+
+  // If Salesforce: never connect, but show immediate UI error + run Lee after a delay
+  if (nameLower === 'salesforce') {
+    // Immediately show the integration error alert (so the user sees something happened)
+    // triggerError signature in your AppContext was used earlier — reuse it here to simulate an error
+    triggerError('integration', integration.name);
+
+    // Delay Lee's messages for human-like timing (1s waiting period then Lee types)
+    setTimeout(() => {
+      triggerIntegrationFlow(integration.name);
+    }, 1000);
+
+    // Do NOT call connectIntegration — Salesforce never works
+    return;
+  }
+
+  // Non-salesforce: run Lee flow and only call connectIntegration if allowed
+  const result = triggerIntegrationFlow(integration.name);
+  if (result !== 'neverWorks') {
+    // normal flow: attempt to connect the integration
+    connectIntegration(integration.id);
+  }
+}}
                 />
               </motion.div>
             ))}
