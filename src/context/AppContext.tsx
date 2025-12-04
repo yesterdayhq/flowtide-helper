@@ -119,10 +119,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // INTEGRATIONS
   const connectIntegration = useCallback(async (integrationId: string) => {
-    // Salesforce: untouched
-    if (integrationId === 'salesforce') return;
+    // SALESFORCE: preserve original behavior
+    if (integrationId === 'salesforce') {
+      setIntegrations(prev => prev.map(i =>
+        i.id === 'salesforce' ? { ...i, status: 'error', connected: false } : i
+      ));
+      setIntegrationError({ id: 'salesforce', message: 'OAuth connection failed for Salesforce.' });
+      setPendingTrigger({ type: 'error', details: 'integration:salesforce' });
+      return;
+    }
 
-    // HubSpot / GA: fail first click, succeed second
+    // HubSpot / GA: fail first click, succeed second click
     if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 1;
     else integrationAttemptRef.current[integrationId]++;
 
