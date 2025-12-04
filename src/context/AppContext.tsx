@@ -1,10 +1,22 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
-import { Integration, UserSession, ChatMessage } from '@/types/demo';
+import { Integration, UserSession, ChatMessage, ActiveThread } from '@/types/demo';
 
 interface AppContextType {
   integrations: Integration[];
   connectIntegration: (integrationId: string) => void;
   integrationError: { [key: string]: string };
+  chatMessages: ChatMessage[];
+  addChatMessage: (msg: ChatMessage) => void;
+  isTyping: boolean;
+  setIsTyping: (val: boolean) => void;
+  isChatOpen: boolean;
+  setIsChatOpen: (val: boolean) => void;
+  userSession: UserSession | null;
+  updateUserSession: (session: Partial<UserSession>) => void;
+  showSnippet: boolean;
+  snippetMessage: string | null;
+  clearSnippet: () => void;
+  resetDemo: () => void;
 }
 
 const defaultIntegrations: Integration[] = [
@@ -18,15 +30,46 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [integrationError, setIntegrationError] = useState<{ [key: string]: string }>({});
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [isTyping, setIsTyping] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [userSession, setUserSession] = useState<UserSession | null>({
+    userName: 'Andrew',
+    activeThread: null,
+  });
+  const [showSnippet, setShowSnippet] = useState(false);
+  const [snippetMessage, setSnippetMessage] = useState<string | null>(null);
+
+  const addChatMessage = useCallback((msg: ChatMessage) => {
+    setChatMessages((prev) => [...prev, msg]);
+  }, []);
+
+  const updateUserSession = useCallback((session: Partial<UserSession>) => {
+    setUserSession((prev) => ({ ...prev, ...session }));
+  }, []);
+
+  const clearSnippet = useCallback(() => {
+    setShowSnippet(false);
+    setSnippetMessage(null);
+  }, []);
+
+  const resetDemo = useCallback(() => {
+    setChatMessages([]);
+    setIsTyping(false);
+    setIsChatOpen(false);
+    setUserSession({ userName: 'Andrew', activeThread: null });
+    setShowSnippet(false);
+    setSnippetMessage(null);
+    setIntegrations(defaultIntegrations);
+    setIntegrationError({});
+  }, []);
 
   const connectIntegration = useCallback(async (integrationId: string) => {
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     setIntegrationError(prev => ({ ...prev, [integrationId]: '' }));
 
     try {
-      // Simulate async OAuth call
       await new Promise((resolve, reject) => setTimeout(() => {
-        // Randomly fail for demo
         if (Math.random() < 0.3) reject(new Error('OAuth failed'));
         else resolve(null);
       }, 1200));
@@ -39,7 +82,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AppContext.Provider value={{ integrations, connectIntegration, integrationError }}>
+    <AppContext.Provider value={{
+      integrations,
+      connectIntegration,
+      integrationError,
+      chatMessages,
+      addChatMessage,
+      isTyping,
+      setIsTyping,
+      isChatOpen,
+      setIsChatOpen,
+      userSession,
+      updateUserSession,
+      showSnippet,
+      snippetMessage,
+      clearSnippet,
+      resetDemo
+    }}>
       {children}
     </AppContext.Provider>
   );
