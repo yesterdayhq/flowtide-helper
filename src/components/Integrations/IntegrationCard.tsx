@@ -32,10 +32,6 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
   const isError = integration.status === 'error';
   const isConnected = integration.status === 'connected';
 
-  // 🚫 Disable Salesforce permanently
-  const isSalesforce = integration.id === 'salesforce';
-  const salesforceDisabled = isSalesforce;
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -44,40 +40,23 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
         'relative overflow-hidden rounded-xl border bg-card p-6 shadow-card transition-all duration-200',
         isError && 'border-destructive/50 bg-destructive/5',
         isConnected && 'border-success/50 bg-success/5',
-        !isError && !isConnected && 'hover:shadow-elevated hover:border-primary/30',
-        salesforceDisabled && 'opacity-60 pointer-events-none'
+        !isError && !isConnected && 'hover:shadow-elevated hover:border-primary/30'
       )}
     >
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         {iconMap[integration.icon]}
       </div>
 
-      <h3 className="mb-2 font-display text-lg font-semibold">
-        {integration.name}
-      </h3>
-      <p className="mb-6 text-sm text-muted-foreground">
-        {salesforceDisabled ? 'Salesforce integration is coming soon.' : integration.description}
-      </p>
+      <h3 className="mb-2 font-display text-lg font-semibold">{integration.name}</h3>
+      <p className="mb-6 text-sm text-muted-foreground">{integration.description}</p>
 
       <Button
-        variant={
-          salesforceDisabled
-            ? 'secondary'
-            : isError
-            ? 'destructive'
-            : isConnected
-            ? 'success'
-            : 'default'
-        }
-        onClick={() => {
-          if (!salesforceDisabled) onConnect();
-        }}
-        disabled={isConnecting || isConnected || salesforceDisabled}
+        variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
+        onClick={onConnect}
+        disabled={isConnecting || isConnected}
         className="w-full gap-2"
       >
-        {salesforceDisabled ? (
-          'Coming Soon'
-        ) : isConnecting ? (
+        {isConnecting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             Connecting...
