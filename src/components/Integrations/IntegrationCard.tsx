@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { AlertCircle, Check, Loader2 } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
 import { Integration } from '@/types/demo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 interface IntegrationCardProps {
   integration: Integration;
   onConnect: () => void;
+  errorMessage?: string;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -27,7 +28,7 @@ const iconMap: Record<string, React.ReactNode> = {
   ),
 };
 
-export function IntegrationCard({ integration, onConnect }: IntegrationCardProps) {
+export function IntegrationCard({ integration, onConnect, errorMessage }: IntegrationCardProps) {
   const isConnecting = integration.status === 'connecting';
   const isError = integration.status === 'error';
   const isConnected = integration.status === 'connected';
@@ -48,7 +49,11 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
       </div>
 
       <h3 className="mb-2 font-display text-lg font-semibold">{integration.name}</h3>
-      <p className="mb-6 text-sm text-muted-foreground">{integration.description}</p>
+      <p className="mb-2 text-sm text-muted-foreground">{integration.description}</p>
+
+      {errorMessage && (
+        <p className="text-sm text-red-500 mb-2">{errorMessage}</p>
+      )}
 
       <Button
         variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
