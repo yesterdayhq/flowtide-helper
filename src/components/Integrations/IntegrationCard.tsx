@@ -32,6 +32,10 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
   const isError = integration.status === 'error';
   const isConnected = integration.status === 'connected';
 
+  // 🚫 Disable Salesforce permanently
+  const isSalesforce = integration.id === 'salesforce';
+  const salesforceDisabled = isSalesforce;
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -40,43 +44,40 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
         'relative overflow-hidden rounded-xl border bg-card p-6 shadow-card transition-all duration-200',
         isError && 'border-destructive/50 bg-destructive/5',
         isConnected && 'border-success/50 bg-success/5',
-        !isError && !isConnected && 'hover:shadow-elevated hover:border-primary/30'
+        !isError && !isConnected && 'hover:shadow-elevated hover:border-primary/30',
+        salesforceDisabled && 'opacity-60 pointer-events-none'
       )}
     >
-      {/* Status indicator */}
-      {isError && (
-        <div className="absolute right-4 top-4">
-          <div className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
-            <AlertCircle className="h-3 w-3" />
-            Error
-          </div>
-        </div>
-      )}
-      {isConnected && (
-        <div className="absolute right-4 top-4">
-          <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
-            <Check className="h-3 w-3" />
-            Connected
-          </div>
-        </div>
-      )}
-
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         {iconMap[integration.icon]}
       </div>
 
-      <h3 className="mb-2 font-display text-lg font-semibold">{integration.name}</h3>
+      <h3 className="mb-2 font-display text-lg font-semibold">
+        {integration.name}
+      </h3>
       <p className="mb-6 text-sm text-muted-foreground">
-        {integration.description}
+        {salesforceDisabled ? 'Salesforce integration is coming soon.' : integration.description}
       </p>
 
       <Button
-        variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
-        onClick={onConnect}
-        disabled={isConnecting || isConnected}
+        variant={
+          salesforceDisabled
+            ? 'secondary'
+            : isError
+            ? 'destructive'
+            : isConnected
+            ? 'success'
+            : 'default'
+        }
+        onClick={() => {
+          if (!salesforceDisabled) onConnect();
+        }}
+        disabled={isConnecting || isConnected || salesforceDisabled}
         className="w-full gap-2"
       >
-        {isConnecting ? (
+        {salesforceDisabled ? (
+          'Coming Soon'
+        ) : isConnecting ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
             Connecting...
