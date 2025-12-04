@@ -121,43 +121,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const connectIntegration = useCallback(async (integrationId: string) => {
     const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
-    // Special-case Salesforce: ALWAYS fail and never become connected
-    if (integrationId === 'salesforce') {
-      // Set integration status to error immediately
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
+    try {
+      // Clear previous error
+      setIntegrationError(null);
 
-      // Set integrationError so the Integrations component & Lee flow pick it up
-      setIntegrationError({ id: integrationId, message: `OAuth connection failed for Salesforce. Please try again.` });
+      // Fetch OAuth URL from backend
+      const res = await fetch(`/api/integrations/${integrationId}/auth-url`);
+      if (!res.ok) throw new Error('Failed to fetch OAuth URL');
+      const { url } = await res.json();
 
-      // Update userSession attempts for Salesforce (so escalated flag works)
+      // Redirect user to OAuth URL (or open popup)
+      window.location.href = url;
+
+      // Note: After successful OAuth callback, backend should signal success
+      // and you can mark the integration as connected like this:
+      // setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
+
+      // Track attempts
       updateUserSession({
         integrationAttempts: {
           ...userSession.integrationAttempts,
           [integrationId]: { attempts: currentAttempts + 1, escalated: currentAttempts >= 1 },
         },
       });
-
-      // Return early — never attempt to set connected
-      return;
+    } catch (err) {
+      console.error(err);
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
+      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId}. Please try again.` });
     }
-
-    // Default behavior for other integrations (HubSpot, Google Analytics)
-    if (currentAttempts === 0) {
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error' } : i));
-      const integration = integrations.find(i => i.id === integrationId);
-      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.` });
-    } else {
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected' } : i));
-      setIntegrationError(null);
-    }
-
-    updateUserSession({
-      integrationAttempts: {
-        ...userSession.integrationAttempts,
-        [integrationId]: { attempts: currentAttempts + 1, escalated: currentAttempts >= 1 },
-      },
-    });
-  }, [integrations, userSession.integrationAttempts, updateUserSession]);
+  }, [userSession.integrationAttempts, updateUserSession]);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
@@ -217,10 +209,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const handleTrigger = async () => {
       isProcessingRef.current = true;
 
-      // Pre-delay before first message
       await new Promise((r) => setTimeout(r, 10000));
 
-      // Greeting
       if (!userSession.greetingSentThisSession) {
         const greeting = !userSession.hasBeenIntroduced
           ? `Hi ${userSession.userName}, I'm Lee!`
