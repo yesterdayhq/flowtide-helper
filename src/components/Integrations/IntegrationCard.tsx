@@ -51,9 +51,7 @@ export function IntegrationCard({ integration, onConnect, errorMessage }: Integr
       <h3 className="mb-2 font-display text-lg font-semibold">{integration.name}</h3>
       <p className="mb-2 text-sm text-muted-foreground">{integration.description}</p>
 
-      {errorMessage && (
-        <p className="text-sm text-red-500 mb-2">{errorMessage}</p>
-      )}
+      {errorMessage && <p className="text-sm text-red-500 mb-2">{errorMessage}</p>}
 
       <Button
         variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
