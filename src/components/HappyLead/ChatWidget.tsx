@@ -47,7 +47,7 @@ export function ChatWidget() {
     });
 
     const delay = () =>
-      new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
+      new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
 
     setIsTyping(true);
     await delay();
@@ -57,159 +57,160 @@ export function ChatWidget() {
     const activeThread = userSession.activeThread;
 
     // --------------------------
-    // Salesforce-specific error
+    // Salesforce-specific message (global)
     // --------------------------
-    if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
-      if (lowerMessage.includes('salesforce')) {
-        addChatMessage({
-          role: 'assistant',
-          content: "Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting Salesforce. Sorry about that! We're working on it on our side.",
-        });
+    if (lowerMessage.includes('salesforce')) {
+      addChatMessage({
+        role: 'assistant',
+        content:
+          "Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting Salesforce. Sorry about that!",
+      });
+      await delay();
+      addChatMessage({
+        role: 'assistant',
+        content: "We're aware of the issue and our team is working on it.",
+      });
 
+      if (activeThread) {
         updateUserSession({
           activeThread: { ...activeThread, resolved: true, awaitingResponse: false },
         });
-        return; // Exit early so normal error logic doesn't run
       }
+      return; // Exit early so no other logic fires
+    }
 
-      // Original error flow
+    // --------------------------
+    // Thread-specific logic
+    // --------------------------
+    if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
       if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
         addChatMessage({
           role: 'assistant',
           content: 'Great! Let me know if you need anything else.',
         });
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       } else if (lowerMessage.includes('fail') || lowerMessage.includes('again') || lowerMessage.includes('still')) {
         addChatMessage({
           role: 'assistant',
           content: "Got it — I'll get someone from our team to help troubleshoot.",
         });
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       } else {
         addChatMessage({
           role: 'assistant',
           content: 'Did connecting it work this time?',
         });
       }
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
       return;
     }
 
-    // --------------------------
-    // Other threads (stuck / happy / general)
-    // --------------------------
     if (activeThread?.type === 'stuck' && activeThread.awaitingResponse) {
       if (lowerMessage.includes('yes') || lowerMessage.includes('help') || lowerMessage.includes('tip') || lowerMessage.includes('sure')) {
         addChatMessage({
           role: 'assistant',
           content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
         });
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       } else if (lowerMessage.includes('no') || lowerMessage.includes('good') || lowerMessage.includes('fine')) {
         addChatMessage({
           role: 'assistant',
           content: "No problem — I'll be here if you need anything.",
         });
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       } else {
         addChatMessage({
           role: 'assistant',
           content: 'Would you like a quick tip to help?',
         });
       }
-    } else if (activeThread?.type === 'happy' && activeThread.awaitingResponse) {
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
+      return;
+    }
+
+    if (activeThread?.type === 'happy' && activeThread.awaitingResponse) {
       if (lowerMessage.includes('call') || lowerMessage.includes('schedule') || lowerMessage.includes('yes')) {
         addChatMessage({
           role: 'assistant',
           content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
         });
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       } else if (lowerMessage.includes('tip') || lowerMessage.includes('best')) {
         addChatMessage({
           role: 'assistant',
           content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
         });
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       } else {
         addChatMessage({
           role: 'assistant',
           content: 'Would you like to schedule a call or get some tips?',
         });
       }
-    } else {
-      if (lowerMessage.includes('error') || lowerMessage.includes('broken')) {
-        addChatMessage({
-          role: 'assistant',
-          content: 'Can you tell me what error you see or which page you\'re on?',
-        });
-      } else if (lowerMessage.includes('call') || lowerMessage.includes('schedule')) {
-        addChatMessage({
-          role: 'assistant',
-          content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
-        });
-      } else if (lowerMessage.includes('tip') || lowerMessage.includes('help')) {
-        addChatMessage({
-          role: 'assistant',
-          content: "I'm here to help — which step are you on?",
-        });
-      } else {
-        addChatMessage({
-          role: 'assistant',
-          content: "I'm here to help with your demo — which step are you on?",
-        });
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       }
+      return;
+    }
+
+    // --------------------------
+    // General conversation
+    // --------------------------
+    if (lowerMessage.includes('error') || lowerMessage.includes('broken')) {
+      addChatMessage({
+        role: 'assistant',
+        content: "Can you tell me what error you see or which page you're on?",
+      });
+    } else if (lowerMessage.includes('call') || lowerMessage.includes('schedule')) {
+      addChatMessage({
+        role: 'assistant',
+        content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+      });
+    } else if (lowerMessage.includes('tip') || lowerMessage.includes('help')) {
+      addChatMessage({
+        role: 'assistant',
+        content: "I'm here to help — which step are you on?",
+      });
+    } else {
+      addChatMessage({
+        role: 'assistant',
+        content: "I'm here to help with your demo — which step are you on?",
+      });
     }
   };
 
   const handleButtonClick = async (action: string) => {
     const delay = () =>
-      new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
+      new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
 
     const activeThread = userSession.activeThread;
 
+    setIsTyping(true);
+    await delay();
+    setIsTyping(false);
+
     if (action === 'show_tip') {
-      setIsTyping(true);
-      await delay();
-      setIsTyping(false);
       addChatMessage({
         role: 'assistant',
         content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
       });
-      if (activeThread) {
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-      }
     } else if (action === 'decline_help') {
-      setIsTyping(true);
-      await delay();
-      setIsTyping(false);
       addChatMessage({
         role: 'assistant',
         content: "No problem — I'll be here if you need anything.",
       });
-      if (activeThread) {
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-      }
     } else if (action === 'schedule_call') {
-      setIsTyping(true);
-      await delay();
-      setIsTyping(false);
       addChatMessage({
         role: 'assistant',
         content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
       });
-      if (activeThread) {
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-      }
     } else if (action === 'send_tips') {
-      setIsTyping(true);
-      await delay();
-      setIsTyping(false);
       addChatMessage({
         role: 'assistant',
         content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
       });
-      if (activeThread) {
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-      }
+    }
+
+    if (activeThread) {
+      updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
     }
   };
 
