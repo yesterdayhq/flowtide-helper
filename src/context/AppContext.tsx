@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { Demo, DemoStep, Integration, UserSession, ChatMessage, ActiveThread, IntegrationAttempt } from '@/types/demo';
+import { Demo, DemoStep, Integration, UserSession, ChatMessage } from '@/types/demo';
 
 interface AppContextType {
   demo: Demo | null;
@@ -121,7 +121,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const connectIntegration = useCallback(async (integrationId: string) => {
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce. Please try again.' });
+      setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
     } else {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError(null);
@@ -181,40 +181,40 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       await new Promise(r => setTimeout(r, 10000));
 
-      // Greeting if needed
-      if (!userSession.greetingSentThisSession) {
-        const greeting = !userSession.hasBeenIntroduced
-          ? `Hi ${userSession.userName}, I'm Lee!`
-          : `Hi ${userSession.userName}, nice to see you back!`;
+      const isSalesforceError =
+        pendingTrigger.type === 'error' && pendingTrigger.details?.endsWith(':salesforce');
 
-        addChatMessage({ role: 'assistant', content: greeting });
-        setSnippetMessage(greeting);
+      if (isSalesforceError) {
+        const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
+        addChatMessage({ role: 'assistant', content: msg1 });
+        setSnippetMessage(msg1);
         setShowSnippet(true);
         await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
 
-        updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
-      }
+        const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
+        addChatMessage({ role: 'assistant', content: msg2 });
+        setSnippetMessage(msg2);
+        setShowSnippet(true);
+        await new Promise(r => setTimeout(r, 3000));
+        setShowSnippet(false);
+      } else {
+        if (!userSession.greetingSentThisSession) {
+          const greeting = !userSession.hasBeenIntroduced
+            ? `Hi ${userSession.userName}, I'm Lee!`
+            : `Hi ${userSession.userName}, nice to see you back!`;
 
-      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
-        const [, integrationId] = pendingTrigger.details.split(':');
-
-        if (integrationId === 'salesforce') {
-          // Always send the unique 2-message flow
-          const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
-          addChatMessage({ role: 'assistant', content: msg1 });
-          setSnippetMessage(msg1);
+          addChatMessage({ role: 'assistant', content: greeting });
+          setSnippetMessage(greeting);
           setShowSnippet(true);
           await new Promise(r => setTimeout(r, 3000));
           setShowSnippet(false);
 
-          const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
-          addChatMessage({ role: 'assistant', content: msg2 });
-          setSnippetMessage(msg2);
-          setShowSnippet(true);
-          await new Promise(r => setTimeout(r, 3000));
-          setShowSnippet(false);
-        } else {
+          updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
+        }
+
+        if (pendingTrigger.type === 'error' && pendingTrigger.details) {
+          const [, integrationId] = pendingTrigger.details.split(':');
           const integration = integrations.find(i => i.id === integrationId);
           const integrationName = integration?.name || integrationId;
           const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
@@ -222,10 +222,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           addChatMessage({ role: 'assistant', content: errorMsg });
           setSnippetMessage(errorMsg);
           setShowSnippet(true);
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 3000));
           setShowSnippet(false);
         }
-      } else if (pendingTrigger.type === 'stuck') {
+      }
+
+      if (pendingTrigger.type === 'stuck') {
         const stuckMsg = `Noticed you might be stuck. Want a quick tip?`;
         addChatMessage({
           role: 'assistant',
@@ -235,12 +237,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             { label: "No, I'm good", action: 'decline_help' },
           ],
         });
-
         setSnippetMessage(stuckMsg);
         setShowSnippet(true);
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
-      } else if (pendingTrigger.type === 'happy') {
+      }
+
+      if (pendingTrigger.type === 'happy') {
         const happyMsg = `Congrats on making your first demo! 🎉 Want me to schedule a quick call to help you get more value?`;
         addChatMessage({
           role: 'assistant',
@@ -250,10 +253,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             { label: 'Send me tips instead', action: 'send_tips' },
           ],
         });
-
         setSnippetMessage(happyMsg);
         setShowSnippet(true);
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
 
         updateUserSession({ firstDemoCompleted: true });
