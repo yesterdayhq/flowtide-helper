@@ -28,11 +28,12 @@ function sendLeeMessage(message: string, delay = 1000) {
 
 // Lee flow for integration errors
 function triggerIntegrationFlow(integrationName: string) {
-  const alreadyMessaged = integrationsMessagedThisSession.has(integrationName.toLowerCase());
+  const nameLower = integrationName.toLowerCase();
+  const alreadyMessaged = integrationsMessagedThisSession.has(nameLower);
 
   // Salesforce never works
-  if (integrationName.toLowerCase() === 'salesforce') {
-    if (alreadyMessaged) return;
+  if (nameLower === 'salesforce') {
+    if (alreadyMessaged) return 'neverWorks'; // Don't repeat messages
 
     const otherIntegrationDone = [...integrationsMessagedThisSession].some(
       name => name !== 'salesforce'
@@ -59,7 +60,9 @@ function triggerIntegrationFlow(integrationName: string) {
     }
 
     integrationsMessagedThisSession.add('salesforce');
-    return;
+
+    // Prevent connection logic from running — Salesforce never connects
+    return 'neverWorks';
   }
 
   // Retryable integrations (Hubspot, GA)
@@ -67,7 +70,9 @@ function triggerIntegrationFlow(integrationName: string) {
     sendLeeMessage(
       `Connection failed. OAuth connection failed for ${integrationName}. Please try again.`
     );
-    integrationsMessagedThisSession.add(integrationName.toLowerCase());
+    integrationsMessagedThisSession.add(nameLower);
+  } else {
+    console.log(`${integrationName} connected successfully on retry.`);
   }
 }
 
@@ -161,7 +166,12 @@ const Integrations = () => {
                   integration={integration}
                   onConnect={() => {
                     clearIntegrationError();
-                    connectIntegration(integration.id);
+
+                    // Trigger Lee flow and prevent Salesforce connection
+                    const result = triggerIntegrationFlow(integration.name);
+                    if (result !== 'neverWorks') {
+                      connectIntegration(integration.id);
+                    }
                   }}
                 />
               </motion.div>
