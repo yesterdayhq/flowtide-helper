@@ -25,12 +25,10 @@ export function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isTyping]);
 
-  // Focus input when chat opens
   useEffect(() => {
     if (isChatOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -58,8 +56,33 @@ export function ChatWidget() {
     const lowerMessage = userMessage.toLowerCase();
     const activeThread = userSession.activeThread;
 
-    // Match response to active thread context
+    // --------------------------
+    // Salesforce-specific error
+    // --------------------------
     if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
+      if (lowerMessage.includes('salesforce')) {
+        // Step 1: Acknowledge & apologize
+        addChatMessage({
+          role: 'assistant',
+          content:
+            "Ah, I see — it looks like Salesforce isn’t connecting right now. Sorry about that!",
+        });
+
+        await delay();
+
+        // Step 2: Let them know we’re working on it
+        addChatMessage({
+          role: 'assistant',
+          content: "We're aware of the issue and our team is working on it.",
+        });
+
+        updateUserSession({
+          activeThread: { ...activeThread, resolved: true, awaitingResponse: false },
+        });
+        return; // Exit early so normal error logic doesn't run
+      }
+
+      // Original error flow
       if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
         addChatMessage({
           role: 'assistant',
@@ -78,7 +101,13 @@ export function ChatWidget() {
           content: 'Did connecting it work this time?',
         });
       }
-    } else if (activeThread?.type === 'stuck' && activeThread.awaitingResponse) {
+      return;
+    }
+
+    // --------------------------
+    // Other threads (stuck / happy / general)
+    // --------------------------
+    if (activeThread?.type === 'stuck' && activeThread.awaitingResponse) {
       if (lowerMessage.includes('yes') || lowerMessage.includes('help') || lowerMessage.includes('tip') || lowerMessage.includes('sure')) {
         addChatMessage({
           role: 'assistant',
@@ -117,7 +146,6 @@ export function ChatWidget() {
         });
       }
     } else {
-      // General conversation - no active thread
       if (lowerMessage.includes('error') || lowerMessage.includes('broken')) {
         addChatMessage({
           role: 'assistant',
@@ -195,9 +223,6 @@ export function ChatWidget() {
     }
   };
 
-  // ------------------------
-  // Floater/snippet component
-  // ------------------------
   const SnippetFloater = () => {
     if (!showSnippet || !snippetMessage) return null;
 
@@ -222,12 +247,10 @@ export function ChatWidget() {
 
   return (
     <>
-      {/* Floater/snippet */}
       <AnimatePresence>
         <SnippetFloater />
       </AnimatePresence>
 
-      {/* Chat button */}
       <AnimatePresence>
         {!isChatOpen && (
           <motion.button
@@ -249,7 +272,6 @@ export function ChatWidget() {
         )}
       </AnimatePresence>
 
-      {/* Chat window */}
       <AnimatePresence>
         {isChatOpen && (
           <motion.div
@@ -259,7 +281,6 @@ export function ChatWidget() {
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className="fixed bottom-6 right-6 z-50 flex h-[500px] w-[380px] flex-col overflow-hidden rounded-2xl border border-border bg-chat-bg shadow-chat"
           >
-            {/* Header */}
             <div className="flex items-center justify-between border-b bg-gradient-accent px-4 py-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-foreground/20">
@@ -282,7 +303,6 @@ export function ChatWidget() {
               </Button>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {chatMessages.length === 0 && (
                 <div className="flex h-full items-center justify-center">
@@ -312,7 +332,6 @@ export function ChatWidget() {
                   >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
 
-                    {/* Action buttons */}
                     {message.buttons && message.buttons.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {message.buttons.map((button) => (
@@ -332,7 +351,6 @@ export function ChatWidget() {
                 </motion.div>
               ))}
 
-              {/* Typing indicator */}
               <AnimatePresence>
                 {isTyping && (
                   <motion.div
@@ -369,7 +387,6 @@ export function ChatWidget() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
             <div className="border-t bg-background p-4">
               <form
                 onSubmit={(e) => {
