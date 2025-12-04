@@ -119,27 +119,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // INTEGRATIONS
   const connectIntegration = useCallback(async (integrationId: string) => {
-    const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
-
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce. Please try again.' });
-    } else if (currentAttempts === 0) {
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error' } : i));
-      const integration = integrations.find(i => i.id === integrationId);
-      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.` });
     } else {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError(null);
     }
-
-    updateUserSession({
-      integrationAttempts: {
-        ...userSession.integrationAttempts,
-        [integrationId]: { attempts: currentAttempts + 1, escalated: currentAttempts >= 1 },
-      },
-    });
-  }, [integrations, userSession.integrationAttempts, updateUserSession]);
+  }, []);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
@@ -157,14 +144,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // TRIGGERS
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
-    if (type === 'integration') {
-      const currentAttempts = userSession.integrationAttempts[details];
-      if (currentAttempts?.escalated) return;
-      const newAttempts: IntegrationAttempt = { integrationId: details, attempts: (currentAttempts?.attempts || 0) + 1, lastAttempt: new Date(), escalated: (currentAttempts?.attempts || 0) >= 1 };
-      updateUserSession({ integrationAttempts: { ...userSession.integrationAttempts, [details]: newAttempts } });
-    }
     setPendingTrigger({ type: 'error', details: `${type}:${details}` });
-  }, [userSession.integrationAttempts, updateUserSession]);
+  }, []);
 
   const triggerStuck = useCallback((stepId: string) => {
     if (isProcessingRef.current) return;
@@ -215,25 +196,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
       }
 
-      // Integration error handling
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
-        const [type, integrationId] = pendingTrigger.details.split(':');
-        const attempts = (userSession.integrationAttempts[integrationId]?.attempts ?? 0) + 1;
+        const [, integrationId] = pendingTrigger.details.split(':');
 
         if (integrationId === 'salesforce') {
-          const msg1 =
-            attempts === 1
-              ? `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`
-              : `Hi, ${userSession.userName}, Lee again, we noticed you also ran into an issue with your Salesforce connection.`;
-
+          // Always send the unique 2-message flow
+          const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
           addChatMessage({ role: 'assistant', content: msg1 });
           setSnippetMessage(msg1);
           setShowSnippet(true);
           await new Promise(r => setTimeout(r, 3000));
           setShowSnippet(false);
 
-          const msg2 =
-            `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
+          const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
           addChatMessage({ role: 'assistant', content: msg2 });
           setSnippetMessage(msg2);
           setShowSnippet(true);
@@ -242,11 +217,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else {
           const integration = integrations.find(i => i.id === integrationId);
           const integrationName = integration?.name || integrationId;
-          const escalated = userSession.integrationAttempts[integrationId]?.escalated;
-
-          const errorMsg = escalated
-            ? `Got it — if it happens again, I'll escalate for help.`
-            : `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
+          const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
 
           addChatMessage({ role: 'assistant', content: errorMsg });
           setSnippetMessage(errorMsg);
