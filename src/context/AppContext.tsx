@@ -121,6 +121,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const connectIntegration = useCallback(async (integrationId: string) => {
     const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
+    // Special-case Salesforce: ALWAYS fail and never become connected
+    if (integrationId === 'salesforce') {
+      // Set integration status to error immediately
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
+
+      // Set integrationError so the Integrations component & Lee flow pick it up
+      setIntegrationError({ id: integrationId, message: `OAuth connection failed for Salesforce. Please try again.` });
+
+      // Update userSession attempts for Salesforce (so escalated flag works)
+      updateUserSession({
+        integrationAttempts: {
+          ...userSession.integrationAttempts,
+          [integrationId]: { attempts: currentAttempts + 1, escalated: currentAttempts >= 1 },
+        },
+      });
+
+      // Return early — never attempt to set connected
+      return;
+    }
+
+    // Default behavior for other integrations (HubSpot, Google Analytics)
     if (currentAttempts === 0) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error' } : i));
       const integration = integrations.find(i => i.id === integrationId);
