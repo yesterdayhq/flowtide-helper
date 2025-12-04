@@ -7,6 +7,73 @@ import { IntegrationCard } from '@/components/Integrations/IntegrationCard';
 import { useApp } from '@/context/AppContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
+// -------------------------------
+// Session tracking for Lee messages
+// -------------------------------
+const integrationsMessagedThisSession = new Set();
+
+// Integration statuses
+const integrationStatus: Record<string, 'retryable' | 'neverWorks'> = {
+  hubspot: 'retryable',
+  googleAnalytics: 'retryable',
+  salesforce: 'neverWorks',
+};
+
+// Helper to send delayed Lee messages
+function sendLeeMessage(message: string, delay = 1000) {
+  setTimeout(() => {
+    Lee.sendMessage(message); // Lovable API
+  }, delay);
+}
+
+// Lee flow for integration errors
+function triggerIntegrationFlow(integrationName: string) {
+  const alreadyMessaged = integrationsMessagedThisSession.has(integrationName.toLowerCase());
+
+  // Salesforce never works
+  if (integrationName.toLowerCase() === 'salesforce') {
+    if (alreadyMessaged) return;
+
+    const otherIntegrationDone = [...integrationsMessagedThisSession].some(
+      name => name !== 'salesforce'
+    );
+
+    if (otherIntegrationDone) {
+      // Short intro if another integration already messaged
+      sendLeeMessage(
+        "Hi, Alex, Lee again, we noticed you also ran into an issue with your Salesforce connection."
+      );
+      sendLeeMessage(
+        "Our team is on it and working on a fix. You don’t need to do anything right now.\nWe’ll update you once it’s resolved. Sorry for the hassle!",
+        2000
+      );
+    } else {
+      // Full intro if no other integrations messaged yet
+      sendLeeMessage(
+        "Hi, Alex, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection."
+      );
+      sendLeeMessage(
+        "Our team is on it and working on a fix. You don’t need to do anything right now.\nWe’ll update you once it’s resolved. Sorry for the hassle!",
+        2000
+      );
+    }
+
+    integrationsMessagedThisSession.add('salesforce');
+    return;
+  }
+
+  // Retryable integrations (Hubspot, GA)
+  if (!alreadyMessaged) {
+    sendLeeMessage(
+      `Connection failed. OAuth connection failed for ${integrationName}. Please try again.`
+    );
+    integrationsMessagedThisSession.add(integrationName.toLowerCase());
+  }
+}
+
+// -------------------------------
+// Integrations Component
+// -------------------------------
 const Integrations = () => {
   const {
     integrations,
@@ -16,12 +83,17 @@ const Integrations = () => {
     triggerError,
   } = useApp();
 
-  // Trigger HappyLead on integration error
+  // Trigger Lee flow after a small delay for human-like timing
   useEffect(() => {
     if (integrationError) {
-      const integration = integrations.find((i) => i.id === integrationError.id);
+      const integration = integrations.find(i => i.id === integrationError.id);
       if (integration) {
         triggerError('integration', integration.name);
+
+        // Small delay before Lee starts messaging
+        setTimeout(() => {
+          triggerIntegrationFlow(integration.name);
+        }, 1000); // 1 second delay before first message
       }
     }
   }, [integrationError, integrations, triggerError]);
