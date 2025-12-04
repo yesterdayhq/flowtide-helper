@@ -121,13 +121,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const connectIntegration = useCallback(async (integrationId: string) => {
     const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
-    if (currentAttempts === 0) {
+    // Salesforce always fails
+    if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error' } : i));
       const integration = integrations.find(i => i.id === integrationId);
       setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.` });
     } else {
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected' } : i));
-      setIntegrationError(null);
+      // Original behavior for other integrations
+      if (currentAttempts === 0) {
+        setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error' } : i));
+        const integration = integrations.find(i => i.id === integrationId);
+        setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.` });
+      } else {
+        setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected' } : i));
+        setIntegrationError(null);
+      }
     }
 
     updateUserSession({
