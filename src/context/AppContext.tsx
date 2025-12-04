@@ -86,6 +86,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   const isProcessingRef = useRef(false);
+  const integrationAttemptRef = useRef<Record<string, boolean>>({});
 
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession(prev => ({ ...prev, ...updates }));
@@ -121,6 +122,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
+      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
+      return;
+    }
+
+    // HubSpot / GA: first click fails, second click succeeds
+    if (!integrationAttemptRef.current[integrationId]) {
+      integrationAttemptRef.current[integrationId] = true;
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
+      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.` });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
@@ -167,6 +177,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsTyping(false);
     setPendingTrigger(null);
     isProcessingRef.current = false;
+    integrationAttemptRef.current = {};
     setShowSnippet(false);
     setSnippetMessage(null);
   }, []);
@@ -178,22 +189,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       await new Promise(r => setTimeout(r, 10000));
 
-      // Always send Salesforce 2-message flow if that's the trigger
-      if (pendingTrigger.type === 'error' && pendingTrigger.details?.endsWith('salesforce')) {
-        const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
-        addChatMessage({ role: 'assistant', content: msg1 });
-        setSnippetMessage(msg1);
-        setShowSnippet(true);
-        await new Promise(r => setTimeout(r, 3000));
-        setShowSnippet(false);
-
-        const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
-        addChatMessage({ role: 'assistant', content: msg2 });
-        setSnippetMessage(msg2);
-        setShowSnippet(true);
-        await new Promise(r => setTimeout(r, 3000));
-        setShowSnippet(false);
-      } else if (pendingTrigger.type === 'error') {
+      if (pendingTrigger.type === 'error') {
         const [, integrationId] = pendingTrigger.details!.split(':');
         const integration = integrations.find(i => i.id === integrationId);
         const integrationName = integration?.name || integrationId;
