@@ -35,6 +35,7 @@ export function ChatWidget() {
     }
   }, [isChatOpen]);
 
+  // -------------------------- Fixed handleSend --------------------------
   const handleSend = async () => {
     if (!inputValue.trim()) return;
 
@@ -56,9 +57,7 @@ export function ChatWidget() {
     const lowerMessage = userMessage.toLowerCase();
     const activeThread = userSession.activeThread;
 
-    // --------------------------
-    // Salesforce-specific message (global)
-    // --------------------------
+    // ---------- Salesforce ----------
     if (lowerMessage.includes('salesforce')) {
       addChatMessage({
         role: 'assistant',
@@ -76,19 +75,25 @@ export function ChatWidget() {
           activeThread: { ...activeThread, resolved: true, awaitingResponse: false },
         });
       }
-      return; // Exit early so no other logic fires
+      return;
     }
 
-    // --------------------------
-    // Thread-specific logic
-    // --------------------------
+    // ---------- Thread-specific ----------
     if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
-      if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
+      if (
+        lowerMessage.includes('work') ||
+        lowerMessage.includes('success') ||
+        lowerMessage.includes('fixed')
+      ) {
         addChatMessage({
           role: 'assistant',
           content: 'Great! Let me know if you need anything else.',
         });
-      } else if (lowerMessage.includes('fail') || lowerMessage.includes('again') || lowerMessage.includes('still')) {
+      } else if (
+        lowerMessage.includes('fail') ||
+        lowerMessage.includes('again') ||
+        lowerMessage.includes('still')
+      ) {
         addChatMessage({
           role: 'assistant',
           content: "Got it — I'll get someone from our team to help troubleshoot.",
@@ -100,18 +105,30 @@ export function ChatWidget() {
         });
       }
       if (activeThread) {
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+        updateUserSession({
+          activeThread: { ...activeThread, resolved: true, awaitingResponse: false },
+        });
       }
       return;
     }
 
     if (activeThread?.type === 'stuck' && activeThread.awaitingResponse) {
-      if (lowerMessage.includes('yes') || lowerMessage.includes('help') || lowerMessage.includes('tip') || lowerMessage.includes('sure')) {
+      if (
+        lowerMessage.includes('yes') ||
+        lowerMessage.includes('help') ||
+        lowerMessage.includes('tip') ||
+        lowerMessage.includes('sure')
+      ) {
         addChatMessage({
           role: 'assistant',
-          content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
+          content:
+            'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
         });
-      } else if (lowerMessage.includes('no') || lowerMessage.includes('good') || lowerMessage.includes('fine')) {
+      } else if (
+        lowerMessage.includes('no') ||
+        lowerMessage.includes('good') ||
+        lowerMessage.includes('fine')
+      ) {
         addChatMessage({
           role: 'assistant',
           content: "No problem — I'll be here if you need anything.",
@@ -123,21 +140,29 @@ export function ChatWidget() {
         });
       }
       if (activeThread) {
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+        updateUserSession({
+          activeThread: { ...activeThread, resolved: true, awaitingResponse: false },
+        });
       }
       return;
     }
 
     if (activeThread?.type === 'happy' && activeThread.awaitingResponse) {
-      if (lowerMessage.includes('call') || lowerMessage.includes('schedule') || lowerMessage.includes('yes')) {
+      if (
+        lowerMessage.includes('call') ||
+        lowerMessage.includes('schedule') ||
+        lowerMessage.includes('yes')
+      ) {
         addChatMessage({
           role: 'assistant',
-          content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+          content:
+            "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
         });
       } else if (lowerMessage.includes('tip') || lowerMessage.includes('best')) {
         addChatMessage({
           role: 'assistant',
-          content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
+          content:
+            "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
         });
       } else {
         addChatMessage({
@@ -146,14 +171,14 @@ export function ChatWidget() {
         });
       }
       if (activeThread) {
-        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+        updateUserSession({
+          activeThread: { ...activeThread, resolved: true, awaitingResponse: false },
+        });
       }
       return;
     }
 
-    // --------------------------
-    // General conversation
-    // --------------------------
+    // ---------- General ----------
     if (lowerMessage.includes('error') || lowerMessage.includes('broken')) {
       addChatMessage({
         role: 'assistant',
@@ -162,7 +187,8 @@ export function ChatWidget() {
     } else if (lowerMessage.includes('call') || lowerMessage.includes('schedule')) {
       addChatMessage({
         role: 'assistant',
-        content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+        content:
+          "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
       });
     } else if (lowerMessage.includes('tip') || lowerMessage.includes('help')) {
       addChatMessage({
@@ -176,6 +202,7 @@ export function ChatWidget() {
       });
     }
   };
+  // -------------------------- End handleSend --------------------------
 
   const handleButtonClick = async (action: string) => {
     const delay = () =>
@@ -190,7 +217,8 @@ export function ChatWidget() {
     if (action === 'show_tip') {
       addChatMessage({
         role: 'assistant',
-        content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
+        content:
+          'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
       });
     } else if (action === 'decline_help') {
       addChatMessage({
@@ -200,17 +228,21 @@ export function ChatWidget() {
     } else if (action === 'schedule_call') {
       addChatMessage({
         role: 'assistant',
-        content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+        content:
+          "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
       });
     } else if (action === 'send_tips') {
       addChatMessage({
         role: 'assistant',
-        content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
+        content:
+          "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
       });
     }
 
     if (activeThread) {
-      updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      updateUserSession({
+        activeThread: { ...activeThread, resolved: true, awaitingResponse: false },
+      });
     }
   };
 
