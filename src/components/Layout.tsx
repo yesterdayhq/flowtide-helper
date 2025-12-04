@@ -75,7 +75,7 @@ export function Layout({ children }: LayoutProps) {
           {/* Right side */}
           <div className="flex items-center gap-3">
             <span className="text-sm text-muted-foreground">
-              Hi, {userSession?.userName || 'there'}
+              Hi, {userSession.userName}
             </span>
             <Button
               variant="outline"

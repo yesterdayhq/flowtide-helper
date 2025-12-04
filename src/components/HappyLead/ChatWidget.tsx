@@ -25,10 +25,12 @@ export function ChatWidget() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isTyping]);
 
+  // Focus input when chat opens
   useEffect(() => {
     if (isChatOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
@@ -41,7 +43,10 @@ export function ChatWidget() {
     const userMessage = inputValue.trim();
     setInputValue('');
 
-    addChatMessage({ role: 'user', content: userMessage });
+    addChatMessage({
+      role: 'user',
+      content: userMessage,
+    });
 
     const delay = () =>
       new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
@@ -51,53 +56,88 @@ export function ChatWidget() {
     setIsTyping(false);
 
     const lowerMessage = userMessage.toLowerCase();
-    const activeThread = userSession?.activeThread;
+    const activeThread = userSession.activeThread;
 
-    // Original logic: threads, happy/stuck/error, responses
-    if (activeThread?.awaitingResponse) {
-      if (activeThread.type === 'error') {
-        if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
-          addChatMessage({ role: 'assistant', content: 'Great! Let me know if you need anything else.' });
-          updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-        } else if (lowerMessage.includes('fail') || lowerMessage.includes('again') || lowerMessage.includes('still')) {
-          addChatMessage({ role: 'assistant', content: "Got it — I'll get someone from our team to help troubleshoot." });
-          updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-        } else {
-          addChatMessage({ role: 'assistant', content: 'Did connecting it work this time?' });
-        }
+    // Match response to active thread context
+    if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
+      if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Great! Let me know if you need anything else.',
+        });
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      } else if (lowerMessage.includes('fail') || lowerMessage.includes('again') || lowerMessage.includes('still')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "Got it — I'll get someone from our team to help troubleshoot.",
+        });
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      } else {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Did connecting it work this time?',
+        });
       }
-      else if (activeThread.type === 'stuck') {
-        if (lowerMessage.includes('yes') || lowerMessage.includes('help') || lowerMessage.includes('tip') || lowerMessage.includes('sure')) {
-          addChatMessage({ role: 'assistant', content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.' });
-          updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-        } else if (lowerMessage.includes('no') || lowerMessage.includes('good') || lowerMessage.includes('fine')) {
-          addChatMessage({ role: 'assistant', content: "No problem — I'll be here if you need anything." });
-          updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-        } else {
-          addChatMessage({ role: 'assistant', content: 'Would you like a quick tip to help?' });
-        }
+    } else if (activeThread?.type === 'stuck' && activeThread.awaitingResponse) {
+      if (lowerMessage.includes('yes') || lowerMessage.includes('help') || lowerMessage.includes('tip') || lowerMessage.includes('sure')) {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
+        });
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      } else if (lowerMessage.includes('no') || lowerMessage.includes('good') || lowerMessage.includes('fine')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "No problem — I'll be here if you need anything.",
+        });
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      } else {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Would you like a quick tip to help?',
+        });
       }
-      else if (activeThread.type === 'happy') {
-        if (lowerMessage.includes('call') || lowerMessage.includes('schedule') || lowerMessage.includes('yes')) {
-          addChatMessage({ role: 'assistant', content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min" });
-          updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-        } else if (lowerMessage.includes('tip') || lowerMessage.includes('best')) {
-          addChatMessage({ role: 'assistant', content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment" });
-          updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
-        } else {
-          addChatMessage({ role: 'assistant', content: 'Would you like to schedule a call or get some tips?' });
-        }
+    } else if (activeThread?.type === 'happy' && activeThread.awaitingResponse) {
+      if (lowerMessage.includes('call') || lowerMessage.includes('schedule') || lowerMessage.includes('yes')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+        });
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      } else if (lowerMessage.includes('tip') || lowerMessage.includes('best')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
+        });
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      } else {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Would you like to schedule a call or get some tips?',
+        });
       }
     } else {
-      // General conversation
+      // General conversation - no active thread
       if (lowerMessage.includes('error') || lowerMessage.includes('broken')) {
-        addChatMessage({ role: 'assistant', content: 'Can you tell me what error you see or which page you\'re on?' });
+        addChatMessage({
+          role: 'assistant',
+          content: 'Can you tell me what error you see or which page you\'re on?',
+        });
       } else if (lowerMessage.includes('call') || lowerMessage.includes('schedule')) {
-        addChatMessage({ role: 'assistant', content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min" });
+        addChatMessage({
+          role: 'assistant',
+          content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+        });
       } else if (lowerMessage.includes('tip') || lowerMessage.includes('help')) {
-        addChatMessage({ role: 'assistant', content: "I'm here to help — which step are you on?" });
+        addChatMessage({
+          role: 'assistant',
+          content: "I'm here to help — which step are you on?",
+        });
       } else {
-        addChatMessage({ role: 'assistant', content: "I'm here to help with your demo — which step are you on?" });
+        addChatMessage({
+          role: 'assistant',
+          content: "I'm here to help with your demo — which step are you on?",
+        });
       }
     }
   };
@@ -106,30 +146,61 @@ export function ChatWidget() {
     const delay = () =>
       new Promise((r) => setTimeout(r, 3000 + Math.random() * 2000));
 
-    const activeThread = userSession?.activeThread;
-
-    setIsTyping(true);
-    await delay();
-    setIsTyping(false);
+    const activeThread = userSession.activeThread;
 
     if (action === 'show_tip') {
-      addChatMessage({ role: 'assistant', content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.' });
-      if (activeThread) updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      setIsTyping(true);
+      await delay();
+      setIsTyping(false);
+      addChatMessage({
+        role: 'assistant',
+        content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
+      });
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
     } else if (action === 'decline_help') {
-      addChatMessage({ role: 'assistant', content: "No problem — I'll be here if you need anything." });
-      if (activeThread) updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      setIsTyping(true);
+      await delay();
+      setIsTyping(false);
+      addChatMessage({
+        role: 'assistant',
+        content: "No problem — I'll be here if you need anything.",
+      });
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
     } else if (action === 'schedule_call') {
-      addChatMessage({ role: 'assistant', content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min" });
-      if (activeThread) updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      setIsTyping(true);
+      await delay();
+      setIsTyping(false);
+      addChatMessage({
+        role: 'assistant',
+        content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+      });
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
     } else if (action === 'send_tips') {
-      addChatMessage({ role: 'assistant', content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment" });
-      if (activeThread) updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      setIsTyping(true);
+      await delay();
+      setIsTyping(false);
+      addChatMessage({
+        role: 'assistant',
+        content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
+      });
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
     }
   };
 
-  // Snippet floater
+  // ------------------------
+  // Floater/snippet component
+  // ------------------------
   const SnippetFloater = () => {
     if (!showSnippet || !snippetMessage) return null;
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -139,14 +210,22 @@ export function ChatWidget() {
         className="fixed bottom-20 right-6 z-50 max-w-xs rounded-lg bg-white px-4 py-3 text-sm text-black shadow-lg"
       >
         {snippetMessage}
-        <button onClick={clearSnippet} className="ml-2 text-xs font-bold underline">✕</button>
+        <button
+          onClick={clearSnippet}
+          className="ml-2 text-xs font-bold underline"
+        >
+          ✕
+        </button>
       </motion.div>
     );
   };
 
   return (
     <>
-      <AnimatePresence><SnippetFloater /></AnimatePresence>
+      {/* Floater/snippet */}
+      <AnimatePresence>
+        <SnippetFloater />
+      </AnimatePresence>
 
       {/* Chat button */}
       <AnimatePresence>
@@ -161,7 +240,7 @@ export function ChatWidget() {
             className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-accent text-accent-foreground shadow-lg shadow-accent/25 transition-shadow hover:shadow-xl hover:shadow-accent/30"
           >
             <MessageCircle className="h-6 w-6" />
-            {chatMessages?.length > 0 && (
+            {chatMessages.length > 0 && (
               <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
                 {chatMessages.filter((m) => m.role === 'assistant').length}
               </span>
@@ -188,17 +267,24 @@ export function ChatWidget() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-accent-foreground">Lee</h3>
-                  <p className="text-xs text-accent-foreground/80">Junior AE at Flowtide</p>
+                  <p className="text-xs text-accent-foreground/80">
+                    Junior AE at Flowtide
+                  </p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon-sm" onClick={() => setIsChatOpen(false)} className="text-accent-foreground hover:bg-accent-foreground/20">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => setIsChatOpen(false)}
+                className="text-accent-foreground hover:bg-accent-foreground/20"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
 
             {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {chatMessages?.length === 0 && (
+              {chatMessages.length === 0 && (
                 <div className="flex h-full items-center justify-center">
                   <p className="text-center text-sm text-muted-foreground">
                     Hey! I'm Lee, here to help you create awesome demos. 👋
@@ -206,20 +292,27 @@ export function ChatWidget() {
                 </div>
               )}
 
-              {chatMessages?.map((message) => (
+              {chatMessages.map((message) => (
                 <motion.div
                   key={message.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className={cn('flex', message.role === 'user' ? 'justify-end' : 'justify-start')}
+                  className={cn(
+                    'flex',
+                    message.role === 'user' ? 'justify-end' : 'justify-start'
+                  )}
                 >
-                  <div className={cn(
-                    'max-w-[85%] rounded-2xl px-4 py-2.5',
-                    message.role === 'user'
-                      ? 'bg-chat-user text-primary-foreground rounded-br-md'
-                      : 'bg-chat-assistant text-foreground rounded-bl-md'
-                  )}>
+                  <div
+                    className={cn(
+                      'max-w-[85%] rounded-2xl px-4 py-2.5',
+                      message.role === 'user'
+                        ? 'bg-chat-user text-primary-foreground rounded-br-md'
+                        : 'bg-chat-assistant text-foreground rounded-bl-md'
+                    )}
+                  >
                     <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+
+                    {/* Action buttons */}
                     {message.buttons && message.buttons.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {message.buttons.map((button) => (
@@ -239,27 +332,72 @@ export function ChatWidget() {
                 </motion.div>
               ))}
 
-              {isTyping && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="flex justify-start">
-                  <div className="rounded-2xl rounded-bl-md bg-chat-assistant px-4 py-3">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs text-muted-foreground">Lee is typing</span>
-                      <span className="flex gap-1">
-                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-typing" style={{ animationDelay: '0ms' }} />
-                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-typing" style={{ animationDelay: '200ms' }} />
-                        <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-typing" style={{ animationDelay: '400ms' }} />
-                      </span>
+              {/* Typing indicator */}
+              <AnimatePresence>
+                {isTyping && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    className="flex justify-start"
+                  >
+                    <div className="rounded-2xl rounded-bl-md bg-chat-assistant px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs text-muted-foreground">
+                          Lee is typing
+                        </span>
+                        <span className="flex gap-1">
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-typing"
+                            style={{ animationDelay: '0ms' }}
+                          />
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-typing"
+                            style={{ animationDelay: '200ms' }}
+                          />
+                          <span
+                            className="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-typing"
+                            style={{ animationDelay: '400ms' }}
+                          />
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </motion.div>
-              )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <div ref={messagesEndRef} />
             </div>
 
             {/* Input */}
             <div className="border-t bg-background p-4">
-              <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
-                <Input ref={inputRef} value={inputValue} onChange={(e) => setInputValue(e.target.value)} placeholder="Type a message..." className="flex-1" />
-                <Button type="submit" size="icon" disabled={!inputValue.trim()} className="shrink-0">
-                  <Send className="h-4 w
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSend();
+                }}
+                className="flex gap-2"
+              >
+                <Input
+                  ref={inputRef}
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Type a message..."
+                  className="flex-1"
+                />
+                <Button
+                  type="submit"
+                  size="icon"
+                  disabled={!inputValue.trim()}
+                  className="shrink-0"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </form>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </>
+  );
+}

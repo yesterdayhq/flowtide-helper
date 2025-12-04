@@ -7,78 +7,6 @@ import { IntegrationCard } from '@/components/Integrations/IntegrationCard';
 import { useApp } from '@/context/AppContext';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
-// -------------------------------
-// Session tracking for Lee messages
-// -------------------------------
-const integrationsMessagedThisSession = new Set();
-
-// Integration statuses
-const integrationStatus: Record<string, 'retryable' | 'neverWorks'> = {
-  hubspot: 'retryable',
-  googleAnalytics: 'retryable',
-  salesforce: 'neverWorks',
-};
-
-// Helper to send delayed Lee messages
-function sendLeeMessage(message: string, delay = 1000) {
-  setTimeout(() => {
-    Lee.sendMessage(message); // Lovable API
-  }, delay);
-}
-
-// Lee flow for integration errors
-function triggerIntegrationFlow(integrationName: string) {
-  const nameLower = integrationName.toLowerCase();
-  const alreadyMessaged = integrationsMessagedThisSession.has(nameLower);
-
-  // Salesforce never works
-  if (nameLower === 'salesforce') {
-    if (alreadyMessaged) return 'neverWorks'; // Don't repeat messages
-
-    const otherIntegrationDone = [...integrationsMessagedThisSession].some(
-      name => name !== 'salesforce'
-    );
-
-    if (otherIntegrationDone) {
-      // Short intro if another integration already messaged
-      sendLeeMessage(
-        "Hi, Alex, Lee again, we noticed you also ran into an issue with your Salesforce connection."
-      );
-      sendLeeMessage(
-        "Our team is on it and working on a fix. You don’t need to do anything right now.\nWe’ll update you once it’s resolved. Sorry for the hassle!",
-        2000
-      );
-    } else {
-      // Full intro if no other integrations messaged yet
-      sendLeeMessage(
-        "Hi, Alex, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection."
-      );
-      sendLeeMessage(
-        "Our team is on it and working on a fix. You don’t need to do anything right now.\nWe’ll update you once it’s resolved. Sorry for the hassle!",
-        2000
-      );
-    }
-
-    integrationsMessagedThisSession.add('salesforce');
-
-    // Prevent connection logic from running — Salesforce never connects
-    return 'neverWorks';
-  }
-
-  // Retryable integrations (Hubspot, GA)
-  if (!alreadyMessaged) {
-    sendLeeMessage(
-      `Connection failed. OAuth connection failed for ${integrationName}. Please try again.`
-    );
-    integrationsMessagedThisSession.add(nameLower);
-  } else {
-    console.log(`${integrationName} connected successfully on retry.`);
-  }
-}
-
-// -------------------------------
-// Integrations Component
-// -------------------------------
 const Integrations = () => {
   const {
     integrations,
@@ -88,17 +16,12 @@ const Integrations = () => {
     triggerError,
   } = useApp();
 
-  // Trigger Lee flow after a small delay for human-like timing
+  // Trigger HappyLead on integration error
   useEffect(() => {
     if (integrationError) {
-      const integration = integrations.find(i => i.id === integrationError.id);
+      const integration = integrations.find((i) => i.id === integrationError.id);
       if (integration) {
         triggerError('integration', integration.name);
-
-        // Small delay before Lee starts messaging
-        setTimeout(() => {
-          triggerIntegrationFlow(integration.name);
-        }, 1000); // 1 second delay before first message
       }
     }
   }, [integrationError, integrations, triggerError]);
@@ -165,32 +88,9 @@ const Integrations = () => {
                 <IntegrationCard
                   integration={integration}
                   onConnect={() => {
-  clearIntegrationError();
-
-  const nameLower = integration.name.toLowerCase();
-
-  // If Salesforce: never connect, but show immediate UI error + run Lee after a delay
-  if (nameLower === 'salesforce') {
-    // Immediately show the integration error alert (so the user sees something happened)
-    // triggerError signature in your AppContext was used earlier — reuse it here to simulate an error
-    triggerError('integration', integration.name);
-
-    // Delay Lee's messages for human-like timing (1s waiting period then Lee types)
-    setTimeout(() => {
-      triggerIntegrationFlow(integration.name);
-    }, 1000);
-
-    // Do NOT call connectIntegration — Salesforce never works
-    return;
-  }
-
-  // Non-salesforce: run Lee flow and only call connectIntegration if allowed
-  const result = triggerIntegrationFlow(integration.name);
-  if (result !== 'neverWorks') {
-    // normal flow: attempt to connect the integration
-    connectIntegration(integration.id);
-  }
-}}
+                    clearIntegrationError();
+                    connectIntegration(integration.id);
+                  }}
                 />
               </motion.div>
             ))}

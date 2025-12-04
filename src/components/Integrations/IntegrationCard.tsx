@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { Check, Loader2 } from 'lucide-react';
+import { AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Integration } from '@/types/demo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -7,7 +7,6 @@ import { cn } from '@/lib/utils';
 interface IntegrationCardProps {
   integration: Integration;
   onConnect: () => void;
-  errorMessage?: string;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -28,7 +27,7 @@ const iconMap: Record<string, React.ReactNode> = {
   ),
 };
 
-export function IntegrationCard({ integration, onConnect, errorMessage }: IntegrationCardProps) {
+export function IntegrationCard({ integration, onConnect }: IntegrationCardProps) {
   const isConnecting = integration.status === 'connecting';
   const isError = integration.status === 'error';
   const isConnected = integration.status === 'connected';
@@ -44,14 +43,32 @@ export function IntegrationCard({ integration, onConnect, errorMessage }: Integr
         !isError && !isConnected && 'hover:shadow-elevated hover:border-primary/30'
       )}
     >
+      {/* Status indicator */}
+      {isError && (
+        <div className="absolute right-4 top-4">
+          <div className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
+            <AlertCircle className="h-3 w-3" />
+            Error
+          </div>
+        </div>
+      )}
+      {isConnected && (
+        <div className="absolute right-4 top-4">
+          <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
+            <Check className="h-3 w-3" />
+            Connected
+          </div>
+        </div>
+      )}
+
       <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-xl bg-muted text-muted-foreground">
         {iconMap[integration.icon]}
       </div>
 
       <h3 className="mb-2 font-display text-lg font-semibold">{integration.name}</h3>
-      <p className="mb-2 text-sm text-muted-foreground">{integration.description}</p>
-
-      {errorMessage && <p className="text-sm text-red-500 mb-2">{errorMessage}</p>}
+      <p className="mb-6 text-sm text-muted-foreground">
+        {integration.description}
+      </p>
 
       <Button
         variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
