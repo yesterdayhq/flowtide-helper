@@ -86,7 +86,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   const isProcessingRef = useRef(false);
-  const integrationAttemptRef = useRef<Record<string, boolean>>({});
+  const integrationAttemptRef = useRef<Record<string, number>>({});
 
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession(prev => ({ ...prev, ...updates }));
@@ -119,21 +119,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // INTEGRATIONS
   const connectIntegration = useCallback(async (integrationId: string) => {
-    if (integrationId === 'salesforce') {
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
-      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
-      return;
-    }
+    // Salesforce: untouched
+    if (integrationId === 'salesforce') return;
 
-    // HubSpot / GA: first click fails, second click succeeds
-    if (!integrationAttemptRef.current[integrationId]) {
-      integrationAttemptRef.current[integrationId] = true;
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.` });
+    // HubSpot / GA: fail first click, succeed second
+    if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 1;
+    else integrationAttemptRef.current[integrationId]++;
+
+    if (integrationAttemptRef.current[integrationId] === 1) {
+      setIntegrations(prev =>
+        prev.map(i =>
+          i.id === integrationId ? { ...i, status: 'error', connected: false } : i
+        )
+      );
+      setIntegrationError({
+        id: integrationId,
+        message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.`,
+      });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
+      setIntegrations(prev =>
+        prev.map(i =>
+          i.id === integrationId ? { ...i, status: 'connected', connected: true } : i
+        )
+      );
       setIntegrationError(null);
     }
   }, []);
