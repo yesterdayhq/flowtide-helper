@@ -122,7 +122,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
     if (integrationId === 'salesforce') {
-      // Salesforce always fails
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce. Please try again.' });
     } else if (currentAttempts === 0) {
@@ -219,12 +218,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Integration error handling
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [type, integrationId] = pendingTrigger.details.split(':');
-        const attempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
+        const attempts = (userSession.integrationAttempts[integrationId]?.attempts ?? 0) + 1;
 
         if (integrationId === 'salesforce') {
-          // Salesforce: first vs subsequent message
           const msg1 =
-            attempts <= 1
+            attempts === 1
               ? `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`
               : `Hi, ${userSession.userName}, Lee again, we noticed you also ran into an issue with your Salesforce connection.`;
 
