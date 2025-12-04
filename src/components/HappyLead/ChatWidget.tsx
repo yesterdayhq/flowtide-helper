@@ -61,19 +61,9 @@ export function ChatWidget() {
     // --------------------------
     if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
       if (lowerMessage.includes('salesforce')) {
-        // Step 1: Acknowledge & apologize
         addChatMessage({
           role: 'assistant',
-          content:
-            "Ah, I see — it looks like Salesforce isn’t connecting right now. Sorry about that!",
-        });
-
-        await delay();
-
-        // Step 2: Let them know we’re working on it
-        addChatMessage({
-          role: 'assistant',
-          content: "We're aware of the issue and our team is working on it.",
+          content: "Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting Salesforce. Sorry about that! We're working on it on our side.",
         });
 
         updateUserSession({
