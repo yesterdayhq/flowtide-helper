@@ -71,22 +71,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [integrationError, setIntegrationError] = useState<{ id: string; message: string } | null>(null);
+
   const [userSession, setUserSession] = useState<UserSession>(defaultUserSession);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+
   const [showSnippet, setShowSnippet] = useState(false);
   const [snippetMessage, setSnippetMessage] = useState<string | null>(null);
-  const [pendingTrigger, setPendingTrigger] = useState<{ type: 'error' | 'stuck' | 'happy'; details?: string } | null>(null);
+
+  const [pendingTrigger, setPendingTrigger] = useState<{
+    type: 'error' | 'stuck' | 'happy';
+    details?: string;
+  } | null>(null);
+
   const isProcessingRef = useRef(false);
 
+  // UPDATE USER SESSION
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
-    setUserSession(prev => ({ ...prev, ...updates }));
+    setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
 
   // DEMO FUNCTIONS
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
-    setDemo(prev => {
+    setDemo((prev) => {
       if (!prev) return prev;
       const newStep: DemoStep = { id: crypto.randomUUID(), order: prev.steps.length + 1, imageUrl, annotation, createdAt: new Date() };
       return { ...prev, steps: [...prev.steps, newStep], updatedAt: new Date() };
@@ -94,48 +102,35 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateStep = useCallback((stepId: string, updates: Partial<DemoStep>) => {
-    setDemo(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, ...updates } : s), updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, ...updates } : s), updatedAt: new Date() } : prev);
   }, []);
 
   const removeStep = useCallback((stepId: string) => {
-    setDemo(prev => prev ? { ...prev, steps: prev.steps.filter(s => s.id !== stepId).map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, steps: prev.steps.filter(s => s.id !== stepId).map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
   }, []);
 
   const reorderSteps = useCallback((newOrder: DemoStep[]) => {
-    setDemo(prev => prev ? { ...prev, steps: newOrder.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, steps: newOrder.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
   }, []);
 
   const publishDemo = useCallback(() => {
-    setDemo(prev => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
   // INTEGRATIONS
   const connectIntegration = useCallback(async (integrationId: string) => {
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
-      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
-      return;
-    }
-
-    // HubSpot & GA first attempt fail, second attempt success
-    const attempts = userSession.integrationAttempts[integrationId] || 0;
-
-    if (attempts === 0) {
-      updateUserSession({
-        integrationAttempts: { ...userSession.integrationAttempts, [integrationId]: 1 }
-      });
-      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId}. Please try again.` });
-      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
+      setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce. Please try again.' });
     } else {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError(null);
     }
-  }, [userSession, updateUserSession]);
+  }, []);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
+  // CHAT FUNCTIONS
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages(prev => [...prev, newMessage]);
@@ -146,6 +141,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
+  // TRIGGERS
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
     setPendingTrigger({ type: 'error', details: `${type}:${details}` });
@@ -177,7 +173,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
-  // HANDLE PENDING TRIGGERS
+  // HANDLE PENDING TRIGGERS (10s delay, chat first, floater second)
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
@@ -185,7 +181,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       await new Promise(r => setTimeout(r, 10000));
 
-      if (!userSession.greetingSentThisSession) {
+      // Decide if we skip the generic greeting for Salesforce
+      let skipGenericGreeting = false;
+      if (pendingTrigger.type === 'error' && pendingTrigger.details?.includes('salesforce')) {
+        skipGenericGreeting = true;
+      }
+
+      // GREETING
+      if (!userSession.greetingSentThisSession && !skipGenericGreeting) {
         const greeting = !userSession.hasBeenIntroduced
           ? `Hi ${userSession.userName}, I'm Lee!`
           : `Hi ${userSession.userName}, nice to see you back!`;
@@ -199,10 +202,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
       }
 
+      // ERROR HANDLING
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [, integrationId] = pendingTrigger.details.split(':');
 
         if (integrationId === 'salesforce') {
+          // Salesforce unique 2-message flow
           const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
           addChatMessage({ role: 'assistant', content: msg1 });
           setSnippetMessage(msg1);
@@ -220,10 +225,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const integration = integrations.find(i => i.id === integrationId);
           const integrationName = integration?.name || integrationId;
           const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
+
           addChatMessage({ role: 'assistant', content: errorMsg });
           setSnippetMessage(errorMsg);
           setShowSnippet(true);
-          await new Promise(r => setTimeout(r, 3000));
+          await new Promise((r) => setTimeout(r, 3000));
           setShowSnippet(false);
         }
       } else if (pendingTrigger.type === 'stuck') {
@@ -236,9 +242,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             { label: "No, I'm good", action: 'decline_help' },
           ],
         });
+
         setSnippetMessage(stuckMsg);
         setShowSnippet(true);
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 3000));
         setShowSnippet(false);
       } else if (pendingTrigger.type === 'happy') {
         const happyMsg = `Congrats on making your first demo! 🎉 Want me to schedule a quick call to help you get more value?`;
@@ -250,9 +257,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             { label: 'Send me tips instead', action: 'send_tips' },
           ],
         });
+
         setSnippetMessage(happyMsg);
         setShowSnippet(true);
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 3000));
         setShowSnippet(false);
 
         updateUserSession({ firstDemoCompleted: true });
