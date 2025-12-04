@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
-import { Demo, DemoStep, Integration, UserSession, ChatMessage, ActiveThread, IntegrationAttempt } from '@/types/demo';
+import { Demo, DemoStep, Integration, UserSession, ChatMessage, IntegrationAttempt } from '@/types/demo';
 
 interface AppContextType {
   demo: Demo | null;
@@ -87,12 +87,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const isProcessingRef = useRef(false);
 
-  // UPDATE USER SESSION
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  // DEMO FUNCTIONS
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
     setDemo((prev) => {
       if (!prev) return prev;
@@ -117,43 +115,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
-  // INTEGRATIONS
+  // Connect integration (HubSpot/Salesforce/GA) — same logic for all
   const connectIntegration = useCallback(async (integrationId: string) => {
-    const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
+    setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
 
     try {
-      // Clear previous error
+      // Simulate async OAuth call
+      await new Promise((r, reject) => setTimeout(() => {
+        // Randomly fail for demonstration
+        if (Math.random() < 0.3) reject(new Error('OAuth failed'));
+        else r(null);
+      }, 1500));
+
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError(null);
-
-      // Fetch OAuth URL from backend
-      const res = await fetch(`/api/integrations/${integrationId}/auth-url`);
-      if (!res.ok) throw new Error('Failed to fetch OAuth URL');
-      const { url } = await res.json();
-
-      // Redirect user to OAuth URL (or open popup)
-      window.location.href = url;
-
-      // Note: After successful OAuth callback, backend should signal success
-      // and you can mark the integration as connected like this:
-      // setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
-
-      // Track attempts
-      updateUserSession({
-        integrationAttempts: {
-          ...userSession.integrationAttempts,
-          [integrationId]: { attempts: currentAttempts + 1, escalated: currentAttempts >= 1 },
-        },
-      });
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId}. Please try again.` });
     }
-  }, [userSession.integrationAttempts, updateUserSession]);
+  }, []);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
-  // CHAT FUNCTIONS
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages(prev => [...prev, newMessage]);
@@ -164,30 +147,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
-  // TRIGGERS
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
-    if (type === 'integration') {
-      const currentAttempts = userSession.integrationAttempts[details];
-      if (currentAttempts?.escalated) return;
-      const newAttempts: IntegrationAttempt = { integrationId: details, attempts: (currentAttempts?.attempts || 0) + 1, lastAttempt: new Date(), escalated: (currentAttempts?.attempts || 0) >= 1 };
-      updateUserSession({ integrationAttempts: { ...userSession.integrationAttempts, [details]: newAttempts } });
-    }
-    setPendingTrigger({ type: 'error', details: `${type}:${details}` });
-  }, [userSession.integrationAttempts, updateUserSession]);
+    setPendingTrigger({ type: 'error', details });
+  }, []);
 
   const triggerStuck = useCallback((stepId: string) => {
     if (isProcessingRef.current) return;
-    if (userSession.stuckPromptedSteps.includes(stepId)) return;
-    updateUserSession({ stuckPromptedSteps: [...userSession.stuckPromptedSteps, stepId] });
     setPendingTrigger({ type: 'stuck', details: stepId });
-  }, [userSession.stuckPromptedSteps, updateUserSession]);
+  }, []);
 
   const triggerHappyMoment = useCallback(() => {
     if (isProcessingRef.current) return;
-    if (userSession.firstDemoCompleted) return;
     setPendingTrigger({ type: 'happy' });
-  }, [userSession.firstDemoCompleted]);
+  }, []);
 
   const resetDemo = useCallback(() => {
     setDemo({ id: crypto.randomUUID(), title: 'My First Demo', steps: [], isPublished: false, createdAt: new Date(), updatedAt: new Date() });
@@ -201,85 +174,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setShowSnippet(false);
     setSnippetMessage(null);
   }, []);
-
-  // HANDLE PENDING TRIGGERS (10s delay, chat first, floater second)
-  useEffect(() => {
-    if (!pendingTrigger || isProcessingRef.current) return;
-
-    const handleTrigger = async () => {
-      isProcessingRef.current = true;
-
-      await new Promise((r) => setTimeout(r, 10000));
-
-      if (!userSession.greetingSentThisSession) {
-        const greeting = !userSession.hasBeenIntroduced
-          ? `Hi ${userSession.userName}, I'm Lee!`
-          : `Hi ${userSession.userName}, nice to see you back!`;
-
-        addChatMessage({ role: 'assistant', content: greeting });
-        setSnippetMessage(greeting);
-        setShowSnippet(true);
-        await new Promise((r) => setTimeout(r, 3000));
-        setShowSnippet(false);
-
-        updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
-      }
-
-      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
-        const [type, integrationId] = pendingTrigger.details.split(':');
-        const integration = integrations.find(i => i.id === integrationId);
-        const integrationName = integration?.name || integrationId;
-        const attempts = userSession.integrationAttempts[integrationId];
-
-        const errorMsg = attempts?.escalated
-          ? `Got it — if it happens again, I'll escalate for help.`
-          : `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
-
-        addChatMessage({ role: 'assistant', content: errorMsg });
-        setSnippetMessage(errorMsg);
-        setShowSnippet(true);
-        await new Promise((r) => setTimeout(r, 3000));
-        setShowSnippet(false);
-      } else if (pendingTrigger.type === 'stuck') {
-        const stuckMsg = `Noticed you might be stuck. Want a quick tip?`;
-        addChatMessage({
-          role: 'assistant',
-          content: stuckMsg,
-          buttons: [
-            { label: 'Yes, show me a tip', action: 'show_tip' },
-            { label: "No, I'm good", action: 'decline_help' },
-          ],
-        });
-
-        setSnippetMessage(stuckMsg);
-        setShowSnippet(true);
-        await new Promise((r) => setTimeout(r, 3000));
-        setShowSnippet(false);
-      } else if (pendingTrigger.type === 'happy') {
-        const happyMsg = `Congrats on making your first demo! 🎉 Want me to schedule a quick call to help you get more value?`;
-        addChatMessage({
-          role: 'assistant',
-          content: happyMsg,
-          buttons: [
-            { label: 'Schedule a call', action: 'schedule_call' },
-            { label: 'Send me tips instead', action: 'send_tips' },
-          ],
-        });
-
-        setSnippetMessage(happyMsg);
-        setShowSnippet(true);
-        await new Promise((r) => setTimeout(r, 3000));
-        setShowSnippet(false);
-
-        updateUserSession({ firstDemoCompleted: true });
-      }
-
-      setPendingTrigger(null);
-      isProcessingRef.current = false;
-    };
-
-    handleTrigger();
-  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession]);
 
   return (
     <AppContext.Provider
