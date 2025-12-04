@@ -219,17 +219,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Integration error handling
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [type, integrationId] = pendingTrigger.details.split(':');
+        const attempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
         if (integrationId === 'salesforce') {
-          // Salesforce special messaging
-          const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
+          // Salesforce: first vs subsequent message
+          const msg1 =
+            attempts <= 1
+              ? `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`
+              : `Hi, ${userSession.userName}, Lee again, we noticed you also ran into an issue with your Salesforce connection.`;
+
           addChatMessage({ role: 'assistant', content: msg1 });
           setSnippetMessage(msg1);
           setShowSnippet(true);
           await new Promise(r => setTimeout(r, 3000));
           setShowSnippet(false);
 
-          const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
+          const msg2 =
+            `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
           addChatMessage({ role: 'assistant', content: msg2 });
           setSnippetMessage(msg2);
           setShowSnippet(true);
@@ -238,9 +244,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         } else {
           const integration = integrations.find(i => i.id === integrationId);
           const integrationName = integration?.name || integrationId;
-          const attempts = userSession.integrationAttempts[integrationId];
+          const escalated = userSession.integrationAttempts[integrationId]?.escalated;
 
-          const errorMsg = attempts?.escalated
+          const errorMsg = escalated
             ? `Got it — if it happens again, I'll escalate for help.`
             : `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
 
