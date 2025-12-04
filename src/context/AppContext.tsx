@@ -71,20 +71,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [integrationError, setIntegrationError] = useState<{ id: string; message: string } | null>(null);
-
   const [userSession, setUserSession] = useState<UserSession>(defaultUserSession);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-
   const [showSnippet, setShowSnippet] = useState(false);
   const [snippetMessage, setSnippetMessage] = useState<string | null>(null);
-
-  const [pendingTrigger, setPendingTrigger] = useState<{
-    type: 'error' | 'stuck' | 'happy';
-    details?: string;
-  } | null>(null);
-
+  const [pendingTrigger, setPendingTrigger] = useState<{ type: 'error' | 'stuck' | 'happy'; details?: string } | null>(null);
   const isProcessingRef = useRef(false);
 
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
@@ -122,11 +115,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
+      return;
+    }
+
+    // HubSpot & GA first attempt fail, second attempt success
+    const attempts = userSession.integrationAttempts[integrationId] || 0;
+
+    if (attempts === 0) {
+      updateUserSession({
+        integrationAttempts: { ...userSession.integrationAttempts, [integrationId]: 1 }
+      });
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
+      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId}. Please try again.` });
+      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError(null);
     }
-  }, []);
+  }, [userSession, updateUserSession]);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
@@ -171,6 +177,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
+  // HANDLE PENDING TRIGGERS
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
@@ -178,46 +185,76 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       await new Promise(r => setTimeout(r, 10000));
 
-      // Always send Salesforce 2-message flow if that's the trigger
-      if (pendingTrigger.type === 'error' && pendingTrigger.details?.endsWith('salesforce')) {
-        const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
-        addChatMessage({ role: 'assistant', content: msg1 });
-        setSnippetMessage(msg1);
+      if (!userSession.greetingSentThisSession) {
+        const greeting = !userSession.hasBeenIntroduced
+          ? `Hi ${userSession.userName}, I'm Lee!`
+          : `Hi ${userSession.userName}, nice to see you back!`;
+
+        addChatMessage({ role: 'assistant', content: greeting });
+        setSnippetMessage(greeting);
         setShowSnippet(true);
         await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
 
-        const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
-        addChatMessage({ role: 'assistant', content: msg2 });
-        setSnippetMessage(msg2);
-        setShowSnippet(true);
-        await new Promise(r => setTimeout(r, 3000));
-        setShowSnippet(false);
-      } else if (pendingTrigger.type === 'error') {
-        const [, integrationId] = pendingTrigger.details!.split(':');
-        const integration = integrations.find(i => i.id === integrationId);
-        const integrationName = integration?.name || integrationId;
-        const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
+        updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
+      }
 
-        addChatMessage({ role: 'assistant', content: errorMsg });
-        setSnippetMessage(errorMsg);
-        setShowSnippet(true);
-        await new Promise(r => setTimeout(r, 3000));
-        setShowSnippet(false);
+      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
+        const [, integrationId] = pendingTrigger.details.split(':');
+
+        if (integrationId === 'salesforce') {
+          const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
+          addChatMessage({ role: 'assistant', content: msg1 });
+          setSnippetMessage(msg1);
+          setShowSnippet(true);
+          await new Promise(r => setTimeout(r, 3000));
+          setShowSnippet(false);
+
+          const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
+          addChatMessage({ role: 'assistant', content: msg2 });
+          setSnippetMessage(msg2);
+          setShowSnippet(true);
+          await new Promise(r => setTimeout(r, 3000));
+          setShowSnippet(false);
+        } else {
+          const integration = integrations.find(i => i.id === integrationId);
+          const integrationName = integration?.name || integrationId;
+          const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
+          addChatMessage({ role: 'assistant', content: errorMsg });
+          setSnippetMessage(errorMsg);
+          setShowSnippet(true);
+          await new Promise(r => setTimeout(r, 3000));
+          setShowSnippet(false);
+        }
       } else if (pendingTrigger.type === 'stuck') {
         const stuckMsg = `Noticed you might be stuck. Want a quick tip?`;
-        addChatMessage({ role: 'assistant', content: stuckMsg });
+        addChatMessage({
+          role: 'assistant',
+          content: stuckMsg,
+          buttons: [
+            { label: 'Yes, show me a tip', action: 'show_tip' },
+            { label: "No, I'm good", action: 'decline_help' },
+          ],
+        });
         setSnippetMessage(stuckMsg);
         setShowSnippet(true);
         await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
       } else if (pendingTrigger.type === 'happy') {
         const happyMsg = `Congrats on making your first demo! 🎉 Want me to schedule a quick call to help you get more value?`;
-        addChatMessage({ role: 'assistant', content: happyMsg });
+        addChatMessage({
+          role: 'assistant',
+          content: happyMsg,
+          buttons: [
+            { label: 'Schedule a call', action: 'schedule_call' },
+            { label: 'Send me tips instead', action: 'send_tips' },
+          ],
+        });
         setSnippetMessage(happyMsg);
         setShowSnippet(true);
         await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
+
         updateUserSession({ firstDemoCompleted: true });
       }
 
