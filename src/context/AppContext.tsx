@@ -121,19 +121,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const connectIntegration = useCallback(async (integrationId: string) => {
     const currentAttempts = userSession.integrationAttempts[integrationId]?.attempts || 0;
 
-    // Salesforce always fails
     if (integrationId === 'salesforce') {
+      // Salesforce always fails
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({ id: integrationId, message: `OAuth connection failed for Salesforce. Our team is on it!` });
+      setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce. Please try again.' });
+    } else if (currentAttempts === 0) {
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error' } : i));
+      const integration = integrations.find(i => i.id === integrationId);
+      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.` });
     } else {
-      if (currentAttempts === 0) {
-        setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error' } : i));
-        const integration = integrations.find(i => i.id === integrationId);
-        setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integration?.name || 'integration'}. Please try again.` });
-      } else {
-        setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
-        setIntegrationError(null);
-      }
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
+      setIntegrationError(null);
     }
 
     updateUserSession({
@@ -201,11 +199,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
+      await new Promise(r => setTimeout(r, 10000));
 
-      // Pre-delay before first message
-      await new Promise((r) => setTimeout(r, 10000));
-
-      // Greeting
+      // Greeting if needed
       if (!userSession.greetingSentThisSession) {
         const greeting = !userSession.hasBeenIntroduced
           ? `Hi ${userSession.userName}, I'm Lee!`
@@ -214,36 +210,30 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         addChatMessage({ role: 'assistant', content: greeting });
         setSnippetMessage(greeting);
         setShowSnippet(true);
-        await new Promise((r) => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
 
         updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
       }
 
+      // Integration error handling
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [type, integrationId] = pendingTrigger.details.split(':');
 
         if (integrationId === 'salesforce') {
-          const otherFailed = Object.entries(userSession.integrationAttempts)
-            .some(([id, attempt]) => (id === 'hubspot' || id === 'google-analytics') && attempt.attempts > 0);
-
-          // Message 1
-          const msg1 = otherFailed
-            ? `Hi, ${userSession.userName}, Lee again, we noticed you also ran into an issue with your Salesforce connection.`
-            : `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
-
+          // Salesforce special messaging
+          const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
           addChatMessage({ role: 'assistant', content: msg1 });
           setSnippetMessage(msg1);
           setShowSnippet(true);
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 3000));
           setShowSnippet(false);
 
-          // Message 2
           const msg2 = `Our team is on it and working on a fix. You don’t need to do anything right now. We’ll update you once it’s resolved. Sorry for the hassle!`;
           addChatMessage({ role: 'assistant', content: msg2 });
           setSnippetMessage(msg2);
           setShowSnippet(true);
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise(r => setTimeout(r, 3000));
           setShowSnippet(false);
         } else {
           const integration = integrations.find(i => i.id === integrationId);
