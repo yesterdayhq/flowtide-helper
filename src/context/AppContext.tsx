@@ -249,11 +249,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
+      
+      // Store the current trigger details before the delay
+      const currentTrigger = { ...pendingTrigger };
+      
       await new Promise(r => setTimeout(r, 10000));
 
-      // ✅ DOUBLE-CHECK: If integration connected during the delay, exit early
-      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
-        const [, integrationId] = pendingTrigger.details.split(':');
+      // ✅ CHECK 1: Was the trigger cancelled during the delay?
+      if (!pendingTrigger || pendingTrigger !== currentTrigger) {
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // ✅ CHECK 2: If integration error, is it now connected?
+      if (currentTrigger.type === 'error' && currentTrigger.details) {
+        const [, integrationId] = currentTrigger.details.split(':');
         const integrationNow = findIntegration(integrationId);
         if (integrationNow?.connected) {
           setPendingTrigger(null);
@@ -263,7 +273,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
 
       // Send the messages
-      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
+      if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [triggerType, integrationId] = pendingTrigger.details.split(':');
         
         if (triggerType === 'integration') {
