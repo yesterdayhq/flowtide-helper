@@ -87,7 +87,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const isProcessingRef = useRef(false);
   const integrationAttemptRef = useRef<Record<string, number>>({});
-  const cancelTriggerRef = useRef(false);
+  const cancelTriggerRef = useRef<Record<string, boolean>>({}); // per-integration cancel
 
   // --------------------------
   // UPDATE USER SESSION
@@ -137,17 +137,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const attempt = integrationAttemptRef.current[integrationId];
 
     const currentIntegration = integrations.find(i => i.id === integrationId);
-
-    // If already connected, skip Lee outreach
     if (currentIntegration?.connected) return;
 
-    // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
+    // ✅ CANCEL TRIGGER: now per-integration
     setPendingTrigger((prev) => {
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
       if (!prev) return prev;
       if (prev.type === 'error' && prevDetails === checkFor) {
-        cancelTriggerRef.current = true;
+        cancelTriggerRef.current[integrationId] = true;
         return null;
       }
       return prev;
@@ -164,7 +162,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // HubSpot and Google Analytics: fail on first attempt, succeed on second
+    // HubSpot and GA: fail first attempt, succeed second
     if (attempt === 1) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
@@ -173,7 +171,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
-      // ✅ SUCCESS on second attempt
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
     }
@@ -224,7 +221,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsTyping(false);
     setPendingTrigger(null);
     isProcessingRef.current = false;
-    cancelTriggerRef.current = false;
+    cancelTriggerRef.current = {};
     integrationAttemptRef.current = {};
     setShowSnippet(false);
     setSnippetMessage(null);
@@ -239,20 +236,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const handleTrigger = async () => {
       isProcessingRef.current = true;
       const currentTrigger = { ...pendingTrigger };
+      const integrationId = currentTrigger.details?.split(':')[1];
 
       await new Promise(r => setTimeout(r, 10000));
 
-      if (cancelTriggerRef.current || !pendingTrigger) {
+      if ((integrationId && cancelTriggerRef.current[integrationId]) || !pendingTrigger) {
+        if (integrationId) cancelTriggerRef.current[integrationId] = false;
         isProcessingRef.current = false;
-        cancelTriggerRef.current = false;
         return;
       }
 
       await new Promise(r => setTimeout(r, 100));
 
       if (currentTrigger.type === 'error' && currentTrigger.details) {
-        const [, integrationId] = currentTrigger.details.split(':');
-        const integrationNow = findIntegration(integrationId);
+        const [, integrationNowId] = currentTrigger.details.split(':');
+        const integrationNow = findIntegration(integrationNowId);
         if (integrationNow?.connected) {
           setPendingTrigger(null);
           isProcessingRef.current = false;
@@ -260,7 +258,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Send messages
+      // --------------------------
+      // SEND MESSAGES
+      // --------------------------
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [triggerType, integrationId] = currentTrigger.details.split(':');
         if (triggerType === 'integration') {
@@ -268,14 +268,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const integrationName = integration?.name || integrationId;
 
           if (integrationId === 'salesforce') {
-            // NEW SALESFORCE MESSAGES
             addChatMessage({
               role: 'assistant',
               content: "Hey, Alex, I’m Lee from Flowtide. I noticed you ran into an error when trying to connect to Salesforce.",
             });
-
             await new Promise(r => setTimeout(r, 2000));
-
             addChatMessage({
               role: 'assistant',
               content: "We’re aware of the issue and are working on a fix. We apologize for that. We’ll reach out once it’s fixed.",
@@ -291,14 +288,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               },
             });
           } else {
-            // Original messaging for HubSpot / GA
             addChatMessage({
               role: 'assistant',
               content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
             });
-
             await new Promise(r => setTimeout(r, 2000));
-
             addChatMessage({
               role: 'assistant',
               content: "Sometimes OAuth connections can be finicky. Want to try connecting again?",
@@ -321,7 +315,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       } else if (pendingTrigger.type === 'stuck') {
         const stepId = pendingTrigger.details;
-
         addChatMessage({
           role: 'assistant',
           content: "Hey Alex! I noticed you've been on this step for a bit. Need a hand?",
@@ -330,7 +323,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             { label: "No, I'm good", action: 'decline_help' },
           ],
         });
-
         updateUserSession({
           activeThread: {
             type: 'stuck',
@@ -349,7 +341,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             { label: "Just send me tips", action: 'send_tips' },
           ],
         });
-
         updateUserSession({
           firstDemoCompleted: true,
           activeThread: {
@@ -361,6 +352,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
+      if (integrationId) cancelTriggerRef.current[integrationId] = false;
       setPendingTrigger(null);
       isProcessingRef.current = false;
     };
