@@ -87,6 +87,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const isProcessingRef = useRef(false);
   const integrationAttemptRef = useRef<Record<string, number>>({});
+  const cancelTriggerRef = useRef(false);
 
   // --------------------------
   // UPDATE USER SESSION
@@ -140,6 +141,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // If already connected, skip Lee outreach
     if (currentIntegration?.connected) return;
 
+    // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
+    setPendingTrigger((prev) => {
+      if (!prev) return prev;
+      if (prev.type === 'error' && prev.details === `integration:${integrationId}`) {
+        cancelTriggerRef.current = true;
+        return null;
+      }
+      return prev;
+    });
+
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
 
@@ -160,18 +171,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
-      // ✅ SUCCESS on second attempt - cancel any pending trigger
+      // ✅ SUCCESS on second attempt
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
-      
-      // Cancel the pending trigger for this integration
-      setPendingTrigger((prev) => {
-        if (!prev) return prev;
-        if (prev.type === 'error' && prev.details === `integration:${integrationId}`) {
-          return null;
-        }
-        return prev;
-      });
     }
   }, [integrations]);
 
@@ -220,6 +222,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsTyping(false);
     setPendingTrigger(null);
     isProcessingRef.current = false;
+    cancelTriggerRef.current = false;
     integrationAttemptRef.current = {};
     setShowSnippet(false);
     setSnippetMessage(null);
@@ -237,6 +240,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // If the integration is now connected, cancel the pending trigger
     if (integration?.connected) {
       setPendingTrigger(null);
+      cancelTriggerRef.current = true;
       isProcessingRef.current = false;
     }
   }, [integrations, pendingTrigger, findIntegration]);
@@ -249,11 +253,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
+      cancelTriggerRef.current = false;
       
       // Store the current trigger details before the delay
       const currentTrigger = { ...pendingTrigger };
       
       await new Promise(r => setTimeout(r, 10000));
+
+      // ✅ CHECK 0: Was this trigger cancelled by the watchdog?
+      if (cancelTriggerRef.current) {
+        isProcessingRef.current = false;
+        cancelTriggerRef.current = false;
+        return;
+      }
 
       // ✅ CHECK 1: Was the trigger cancelled during the delay?
       if (!pendingTrigger) {
