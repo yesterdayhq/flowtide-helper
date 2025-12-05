@@ -8,47 +8,90 @@ import { useApp } from '@/context/AppContext';
 
 interface IntegrationCardProps {
   integration: Integration;
-  onConnect: () => void;
+  onConnect: () => Promise<boolean> | boolean;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
   hubspot: (
     <svg viewBox="0 0 24 24" className="h-10 w-10" fill="currentColor">
-      {/* SVG path omitted for brevity */}
+      {/* SVG path omitted */}
     </svg>
   ),
   salesforce: (
     <svg viewBox="0 0 24 24" className="h-10 w-10" fill="currentColor">
-      {/* SVG path omitted for brevity */}
+      {/* SVG path omitted */}
     </svg>
   ),
   analytics: (
     <svg viewBox="0 0 24 24" className="h-10 w-10" fill="currentColor">
-      {/* SVG path omitted for brevity */}
+      {/* SVG path omitted */}
     </svg>
   ),
 };
 
 export function IntegrationCard({ integration, onConnect }: IntegrationCardProps) {
   const { userSession, updateUserSession } = useApp();
+
   const isConnecting = integration.status === 'connecting';
   const isError = integration.status === 'error';
   const isConnected = integration.status === 'connected';
 
-  // --------------------------
-  // Run side-effect when status changes
-  // --------------------------
+  // -------------------------------------------------------------------
+  // When the integration successfully connects after an error,
+  // mark the error thread as resolved and tell ChatWidget not to reply.
+  // -------------------------------------------------------------------
   useEffect(() => {
-    if (isConnected && userSession.activeThread?.type === 'error') {
+    const active = userSession.activeThread;
+
+    if (isConnected && active?.type === 'error') {
       updateUserSession({
-        activeThread: { ...userSession.activeThread, resolved: true, skipNextReply: true },
+        activeThread: {
+          ...active,
+          resolved: true,
+          skipNextReply: true,
+          awaitingResponse: false
+        }
       });
     }
   }, [isConnected, userSession.activeThread, updateUserSession]);
 
-  const handleConnect = () => {
-    onConnect();
-    // No need to set skipNextReply here — handled in useEffect above
+  // -------------------------------------------------------------------
+  // Main connect handler (handles both success + error)
+  // -------------------------------------------------------------------
+  const handleConnect = async () => {
+    const result = await onConnect();
+
+    const active = userSession.activeThread;
+
+    // -----------------------------
+    // CASE 1 — CONNECT FAILED
+    // -----------------------------
+    if (!result) {
+      updateUserSession({
+        activeThread: {
+          type: 'error',
+          integration: integration.icon, // "hubspot" | "salesforce"
+          resolved: false,
+          awaitingResponse: true,
+          skipNextReply: false
+        }
+      });
+      return;
+    }
+
+    // -----------------------------
+    // CASE 2 — CONNECT SUCCESS
+    // -----------------------------
+    if (active?.type === 'error' && active.integration === integration.icon) {
+      updateUserSession({
+        activeThread: {
+          ...active,
+          resolved: true,
+          awaitingResponse: false,
+          skipNextReply: true
+        }
+      });
+    }
   };
 
   return (
@@ -70,6 +113,7 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
           </div>
         </div>
       )}
+
       {isConnected && (
         <div className="absolute right-4 top-4">
           <div className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1 text-xs font-medium text-success">
@@ -87,7 +131,13 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
       <p className="mb-6 text-sm text-muted-foreground">{integration.description}</p>
 
       <Button
-        variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
+        variant={
+          isError
+            ? 'destructive'
+            : isConnected
+            ? 'success'
+            : 'default'
+        }
         onClick={handleConnect}
         disabled={isConnecting || isConnected}
         className="w-full gap-2"
