@@ -256,7 +256,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       await new Promise(r => setTimeout(r, 10000));
 
       // ✅ CHECK 1: Was the trigger cancelled during the delay?
-      if (!pendingTrigger || pendingTrigger !== currentTrigger) {
+      if (!pendingTrigger) {
         isProcessingRef.current = false;
         return;
       }
