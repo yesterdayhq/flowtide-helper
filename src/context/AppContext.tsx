@@ -142,9 +142,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (currentIntegration?.connected) return;
 
     // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
+    console.log('🔵 connectIntegration called', { integrationId, attempt, hasPendingTrigger: !!pendingTrigger });
     setPendingTrigger((prev) => {
       if (!prev) return prev;
       if (prev.type === 'error' && prev.details === `integration:${integrationId}`) {
+        console.log('🟢 CANCELLING TRIGGER', { integrationId });
         cancelTriggerRef.current = true;
         return null;
       }
@@ -235,22 +237,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
+      console.log('🟡 handleTrigger START', { trigger: pendingTrigger });
       isProcessingRef.current = true;
       
       // Store the current trigger details before the delay
       const currentTrigger = { ...pendingTrigger };
       
+      console.log('⏰ Starting 10 second delay...');
       await new Promise(r => setTimeout(r, 10000));
+      console.log('⏰ 10 seconds elapsed');
 
       // ✅ CHECK 0: Was this trigger cancelled?
+      console.log('🔍 CHECK 0: cancelTriggerRef =', cancelTriggerRef.current);
       if (cancelTriggerRef.current) {
+        console.log('❌ EXITING: Trigger was cancelled');
         isProcessingRef.current = false;
         cancelTriggerRef.current = false;
         return;
       }
 
       // ✅ CHECK 1: Was the trigger cancelled during the delay?
+      console.log('🔍 CHECK 1: pendingTrigger =', pendingTrigger);
       if (!pendingTrigger) {
+        console.log('❌ EXITING: pendingTrigger is null');
         isProcessingRef.current = false;
         return;
       }
@@ -259,13 +268,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [, integrationId] = currentTrigger.details.split(':');
         const integrationNow = findIntegration(integrationId);
+        console.log('🔍 CHECK 2: integration connected?', { integrationId, connected: integrationNow?.connected });
         if (integrationNow?.connected) {
+          console.log('❌ EXITING: Integration is now connected');
           setPendingTrigger(null);
           isProcessingRef.current = false;
           return;
         }
       }
 
+      console.log('✅ SENDING MESSAGES');
       // Send the messages
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [triggerType, integrationId] = currentTrigger.details.split(':');
