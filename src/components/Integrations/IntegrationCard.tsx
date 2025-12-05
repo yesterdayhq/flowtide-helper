@@ -3,11 +3,11 @@ import { AlertCircle, Check, Loader2 } from 'lucide-react';
 import { Integration } from '@/types/demo';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
+import { useApp } from '@/context/AppContext';
 
 interface IntegrationCardProps {
   integration: Integration;
   onConnect: () => void;
-  onUserSolved?: () => void; // NEW: callback for user-solved integration
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -28,19 +28,20 @@ const iconMap: Record<string, React.ReactNode> = {
   ),
 };
 
-export function IntegrationCard({ integration, onConnect, onUserSolved }: IntegrationCardProps) {
+export function IntegrationCard({ integration, onConnect }: IntegrationCardProps) {
+  const { userSession, updateUserSession } = useApp();
   const isConnecting = integration.status === 'connecting';
   const isError = integration.status === 'error';
   const isConnected = integration.status === 'connected';
 
-  const handleClick = () => {
-    if (isConnecting || isConnected) return;
-
+  const handleConnect = () => {
     onConnect();
 
-    // If the integration becomes connected after this click, mark it as solved
-    if (integration.status === 'connected' && onUserSolved) {
-      onUserSolved();
+    // If user fixes manually after error, mark in session so ChatWidget skips reply
+    if (isConnected && userSession.activeThread?.type === 'error') {
+      updateUserSession({
+        activeThread: { ...userSession.activeThread, resolved: true, skipNextReply: true },
+      });
     }
   };
 
@@ -55,7 +56,6 @@ export function IntegrationCard({ integration, onConnect, onUserSolved }: Integr
         !isError && !isConnected && 'hover:shadow-elevated hover:border-primary/30'
       )}
     >
-      {/* Status indicator */}
       {isError && (
         <div className="absolute right-4 top-4">
           <div className="flex items-center gap-1.5 rounded-full bg-destructive/10 px-2.5 py-1 text-xs font-medium text-destructive">
@@ -78,13 +78,11 @@ export function IntegrationCard({ integration, onConnect, onUserSolved }: Integr
       </div>
 
       <h3 className="mb-2 font-display text-lg font-semibold">{integration.name}</h3>
-      <p className="mb-6 text-sm text-muted-foreground">
-        {integration.description}
-      </p>
+      <p className="mb-6 text-sm text-muted-foreground">{integration.description}</p>
 
       <Button
         variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
-        onClick={handleClick}
+        onClick={handleConnect}
         disabled={isConnecting || isConnected}
         className="w-full gap-2"
       >
