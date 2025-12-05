@@ -88,7 +88,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const isProcessingRef = useRef(false);
   const integrationAttemptRef = useRef<Record<string, number>>({});
   const cancelTriggerRef = useRef(false);
-  const sentIntegrationErrorRef = useRef<Record<string, boolean>>({}); // ✅ Prevent duplicate messages
 
   // --------------------------
   // UPDATE USER SESSION
@@ -143,14 +142,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (currentIntegration?.connected) return;
 
     // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
+    console.log('🔵 connectIntegration called', { integrationId, attempt, hasPendingTrigger: !!pendingTrigger, currentTrigger: pendingTrigger });
     setPendingTrigger((prev) => {
+      console.log('🔍 Checking if should cancel');
+      console.log('   prev:', prev);
+      console.log('   prev.details:', prev?.details);
+      console.log('   checkingFor:', `integration:${integrationId}`);
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
+      console.log('   Match?:', prevDetails === checkFor);
       if (!prev) return prev;
       if (prev.type === 'error' && prevDetails === checkFor) {
+        console.log('🟢 CANCELLING TRIGGER', { integrationId });
         cancelTriggerRef.current = true;
         return null;
       }
+      console.log('⚠️ NOT CANCELLING - conditions not met');
       return prev;
     });
 
@@ -159,6 +166,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Salesforce always fails
     if (integrationId === 'salesforce') {
+      console.log('📛 Setting Salesforce error trigger');
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
@@ -167,6 +175,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // HubSpot and Google Analytics: fail on first attempt, succeed on second
     if (attempt === 1) {
+      console.log('📛 Setting error trigger (attempt 1)', { integrationId });
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
         id: integrationId,
@@ -227,7 +236,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     isProcessingRef.current = false;
     cancelTriggerRef.current = false;
     integrationAttemptRef.current = {};
-    sentIntegrationErrorRef.current = {};
     setShowSnippet(false);
     setSnippetMessage(null);
   }, []);
@@ -239,44 +247,65 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
+      console.log('🟡 handleTrigger START', { trigger: pendingTrigger });
       isProcessingRef.current = true;
+      
+      // Store the current trigger details before the delay
       const currentTrigger = { ...pendingTrigger };
-
+      
+      console.log('⏰ Starting 10 second delay...');
       await new Promise(r => setTimeout(r, 10000));
+      console.log('⏰ 10 seconds elapsed');
 
+      // ✅ CHECK 0: Was this trigger cancelled?
+      console.log('🔍 CHECK 0: cancelTriggerRef =', cancelTriggerRef.current);
       if (cancelTriggerRef.current) {
+        console.log('❌ EXITING: Trigger was cancelled');
         isProcessingRef.current = false;
         cancelTriggerRef.current = false;
         return;
       }
 
+      // ✅ CHECK 1: Was the trigger cancelled during the delay?
+      console.log('🔍 CHECK 1: pendingTrigger =', pendingTrigger);
       if (!pendingTrigger) {
+        console.log('❌ EXITING: pendingTrigger is null');
         isProcessingRef.current = false;
         return;
       }
 
+      // Small delay to let state updates settle
       await new Promise(r => setTimeout(r, 100));
 
-      // Integration error: prevent duplicate messages
+      // ✅ CHECK 2: If integration error, is it now connected?
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [, integrationId] = currentTrigger.details.split(':');
         const integrationNow = findIntegration(integrationId);
+        console.log('🔍 CHECK 2: integration connected?', { integrationId, connected: integrationNow?.connected });
         if (integrationNow?.connected) {
+          console.log('❌ EXITING: Integration is now connected');
           setPendingTrigger(null);
           isProcessingRef.current = false;
           return;
         }
+      }
 
-        if (!sentIntegrationErrorRef.current[integrationId]) {
-          // Send messages
+      console.log('✅ SENDING MESSAGES');
+      // Send the messages
+      if (currentTrigger.type === 'error' && currentTrigger.details) {
+        const [triggerType, integrationId] = currentTrigger.details.split(':');
+        
+        if (triggerType === 'integration') {
           const integration = findIntegration(integrationId);
           const integrationName = integration?.name || integrationId;
-
+          
           addChatMessage({
             role: 'assistant',
             content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
           });
+          
           await new Promise(r => setTimeout(r, 2000));
+          
           addChatMessage({
             role: 'assistant',
             content: "Sometimes OAuth connections can be finicky. Want to try connecting again?",
@@ -295,15 +324,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               skipNextReply: false,
             },
           });
-
-          sentIntegrationErrorRef.current[integrationId] = true;
         }
-      }
-
-      // Stuck trigger
-      if (currentTrigger.type === 'stuck' && currentTrigger.details) {
-        const stepId = currentTrigger.details;
-
+      } else if (pendingTrigger.type === 'stuck') {
+        const stepId = pendingTrigger.details;
+        
         addChatMessage({
           role: 'assistant',
           content: "Hey Alex! I noticed you've been on this step for a bit. Need a hand?",
@@ -322,10 +346,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             skipNextReply: false,
           },
         });
-      }
-
-      // Happy moment
-      if (currentTrigger.type === 'happy') {
+      } else if (pendingTrigger.type === 'happy') {
         addChatMessage({
           role: 'assistant',
           content: "🎉 Nice work, Alex! You just published your first demo!\n\nWant to schedule a quick call to learn some pro tips?",
@@ -351,7 +372,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     handleTrigger();
-  }, [pendingTrigger, addChatMessage, updateUserSession, findIntegration]);
+  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession, findIntegration]);
 
   return (
     <AppContext.Provider
