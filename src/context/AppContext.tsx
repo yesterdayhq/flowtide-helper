@@ -144,7 +144,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
     console.log('🔵 connectIntegration called', { integrationId, attempt, hasPendingTrigger: !!pendingTrigger, currentTrigger: pendingTrigger });
     setPendingTrigger((prev) => {
-      console.log('🔍 Checking if should cancel', { prev, checkingFor: `integration:${integrationId}` });
+      console.log('🔍 Checking if should cancel');
+      console.log('   prev:', prev);
+      console.log('   prev.details:', prev?.details);
+      console.log('   checkingFor:', `integration:${integrationId}`);
+      console.log('   Match?:', prev?.details === `integration:${integrationId}`);
       if (!prev) return prev;
       if (prev.type === 'error' && prev.details === `integration:${integrationId}`) {
         console.log('🟢 CANCELLING TRIGGER', { integrationId });
