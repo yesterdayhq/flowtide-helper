@@ -35,15 +35,16 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
   const isConnected = integration.status === 'connected';
 
   const handleConnect = () => {
-    onConnect();
+  onConnect();
 
-    // If user fixes manually after error, mark in session so ChatWidget skips reply
-    if (isConnected && userSession.activeThread?.type === 'error') {
-      updateUserSession({
-        activeThread: { ...userSession.activeThread, resolved: true, skipNextReply: true },
-      });
-    }
-  };
+  // If user fixes manually after error, mark in session so ChatWidget skips reply
+  if ((isConnected || integration.status === 'connected') && userSession.activeThread?.type === 'error') {
+    updateUserSession({
+      activeThread: { ...userSession.activeThread, resolved: true, skipNextReply: true },
+    });
+  }
+};
+
 
   return (
     <motion.div
