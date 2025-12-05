@@ -57,13 +57,13 @@ export function ChatWidget() {
     const activeThread = userSession.activeThread;
 
     // --------------------------
-    // Skip Lee reply if user manually fixed integration
+    // Skip reply if user fixed integration manually
     // --------------------------
     if (activeThread?.skipNextReply) {
       updateUserSession({
-        activeThread: { ...activeThread, skipNextReply: false, resolved: true },
+        activeThread: { ...activeThread, skipNextReply: false, resolved: true, awaitingResponse: false },
       });
-      return; // Do NOT send any assistant message
+      return; // Exit early, don't reply
     }
 
     // --------------------------
@@ -187,9 +187,6 @@ export function ChatWidget() {
     }
   };
 
-  // --------------------------
-  // Button click handler
-  // --------------------------
   const handleButtonClick = async (action: string) => {
     const delay = () =>
       new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
@@ -227,9 +224,6 @@ export function ChatWidget() {
     }
   };
 
-  // --------------------------
-  // Snippet Floater
-  // --------------------------
   const SnippetFloater = () => {
     if (!showSnippet || !snippetMessage) return null;
 
