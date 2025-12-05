@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 
 export function ChatWidget() {
   const {
+    integrations,
     chatMessages,
     addChatMessage,
     isTyping,
@@ -38,12 +39,32 @@ export function ChatWidget() {
   useEffect(() => {
     if (isChatOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
-      markIntegrationResolvedIfConnected(); // <-- check when chat opens
+      markIntegrationResolvedIfConnected(); // check when chat opens
     }
   }, [isChatOpen]);
 
   // --------------------------
-  // Stop replying if skipNextReply becomes true
+  // If integrations change (user connected one), auto-resolve error threads
+  // so Lee won't send the delayed outreach.
+  // --------------------------
+  useEffect(() => {
+    // If activeThread is an integration error, and HubSpot or GA is now connected,
+    // mark resolved / skip next reply.
+    const activeThread = userSession.activeThread;
+    if (!activeThread || activeThread.type !== 'error') return;
+
+    const hubspot = integrations.find((i) => i.id === 'hubspot');
+    const ga = integrations.find((i) => i.id === 'google-analytics');
+
+    if ((hubspot && hubspot.connected) || (ga && ga.connected)) {
+      updateUserSession({
+        activeThread: { ...activeThread, resolved: true, skipNextReply: true, awaitingResponse: false },
+      });
+    }
+  }, [integrations, userSession.activeThread, updateUserSession]);
+
+  // --------------------------
+  // Stop replying if skipNextReply becomes true (safety)
   // --------------------------
   useEffect(() => {
     const activeThread = userSession.activeThread;
@@ -59,10 +80,21 @@ export function ChatWidget() {
   // --------------------------
   const markIntegrationResolvedIfConnected = () => {
     const activeThread = userSession.activeThread;
-    const hubspotConnected = userSession.hubspot?.connected;
-    const salesforceConnected = userSession.salesforce?.connected;
+    if (!activeThread) return;
 
-    if ((activeThread?.type === 'error' || activeThread?.type === 'stuck') && (hubspotConnected || salesforceConnected)) {
+    // Check real integrations state (not userSession properties)
+    const hubspot = integrations.find((i) => i.id === 'hubspot');
+    const ga = integrations.find((i) => i.id === 'google-analytics');
+    const salesforce = integrations.find((i) => i.id === 'salesforce');
+
+    const anyConnected =
+      (hubspot && hubspot.connected) ||
+      (ga && ga.connected) ||
+      (salesforce && salesforce.connected);
+
+    // If there's an active error/stuck thread and the integration got connected,
+    // mark it resolved and skip the next automated reply.
+    if ((activeThread.type === 'error' || activeThread.type === 'stuck') && anyConnected) {
       updateUserSession({
         activeThread: {
           ...activeThread,
@@ -80,7 +112,8 @@ export function ChatWidget() {
   const handleSend = async () => {
     if (!inputValue.trim()) return;
 
-    markIntegrationResolvedIfConnected(); // <-- prevent replying if already fixed
+    // re-check integrations before replying so we don't reply if user fixed it
+    markIntegrationResolvedIfConnected();
 
     const userMessage = inputValue.trim();
     setInputValue('');
@@ -90,8 +123,7 @@ export function ChatWidget() {
       content: userMessage,
     });
 
-    const delay = () =>
-      new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
+    const delay = () => new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
 
     setIsTyping(true);
     await delay();
@@ -129,17 +161,114 @@ export function ChatWidget() {
     }
 
     // --------------------------
-    // Thread-specific logic (error, stuck, happy, general conversation)
+    // Thread-specific logic (error)
     // --------------------------
-    // ... leave your existing logic here unchanged
+    if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
+      if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Great! Let me know if you need anything else.',
+        });
+      } else if (lowerMessage.includes('fail') || lowerMessage.includes('again') || lowerMessage.includes('still')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "Got it — I'll get someone from our team to help troubleshoot.",
+        });
+      } else {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Did connecting it work this time?',
+        });
+      }
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
+      return;
+    }
+
+    // --------------------------
+    // Thread-specific logic (stuck)
+    // --------------------------
+    if (activeThread?.type === 'stuck' && activeThread.awaitingResponse) {
+      if (lowerMessage.includes('yes') || lowerMessage.includes('help') || lowerMessage.includes('tip') || lowerMessage.includes('sure')) {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
+        });
+      } else if (lowerMessage.includes('no') || lowerMessage.includes('good') || lowerMessage.includes('fine')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "No problem — I'll be here if you need anything.",
+        });
+      } else {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Would you like a quick tip to help?',
+        });
+      }
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
+      return;
+    }
+
+    // --------------------------
+    // Thread-specific logic (happy)
+    // --------------------------
+    if (activeThread?.type === 'happy' && activeThread.awaitingResponse) {
+      if (lowerMessage.includes('call') || lowerMessage.includes('schedule') || lowerMessage.includes('yes')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+        });
+      } else if (lowerMessage.includes('tip') || lowerMessage.includes('best')) {
+        addChatMessage({
+          role: 'assistant',
+          content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
+        });
+      } else {
+        addChatMessage({
+          role: 'assistant',
+          content: 'Would you like to schedule a call or get some tips?',
+        });
+      }
+      if (activeThread) {
+        updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+      }
+      return;
+    }
+
+    // --------------------------
+    // General conversation
+    // --------------------------
+    if (lowerMessage.includes('error') || lowerMessage.includes('broken')) {
+      addChatMessage({
+        role: 'assistant',
+        content: "Can you tell me what error you see or which page you're on?",
+      });
+    } else if (lowerMessage.includes('call') || lowerMessage.includes('schedule')) {
+      addChatMessage({
+        role: 'assistant',
+        content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
+      });
+    } else if (lowerMessage.includes('tip') || lowerMessage.includes('help')) {
+      addChatMessage({
+        role: 'assistant',
+        content: "I'm here to help — which step are you on?",
+      });
+    } else {
+      addChatMessage({
+        role: 'assistant',
+        content: "I'm here to help with your demo — which step are you on?",
+      });
+    }
   };
 
   // --------------------------
   // Handle assistant action buttons
   // --------------------------
   const handleButtonClick = async (action: string) => {
-    const delay = () =>
-      new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
+    const delay = () => new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
 
     const activeThread = userSession.activeThread;
 
@@ -229,9 +358,6 @@ export function ChatWidget() {
         )}
       </AnimatePresence>
 
-      {/* -------------------------- */}
-      {/* Open chat */}
-      {/* -------------------------- */}
       <AnimatePresence>
         {isChatOpen && (
           <motion.div
@@ -241,7 +367,6 @@ export function ChatWidget() {
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className="fixed bottom-6 right-6 z-50 flex h-[500px] w-[380px] flex-col overflow-hidden rounded-2xl border border-border bg-chat-bg shadow-chat"
           >
-            {/* Header */}
             <div className="flex items-center justify-between border-b bg-gradient-accent px-4 py-3">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-foreground/20">
@@ -264,7 +389,6 @@ export function ChatWidget() {
               </Button>
             </div>
 
-            {/* Messages */}
             <div className="flex-1 overflow-y-auto p-4 space-y-4">
               {chatMessages.length === 0 && (
                 <div className="flex h-full items-center justify-center">
@@ -349,7 +473,6 @@ export function ChatWidget() {
               <div ref={messagesEndRef} />
             </div>
 
-            {/* Input */}
             <div className="border-t bg-background p-4">
               <form
                 onSubmit={(e) => {
