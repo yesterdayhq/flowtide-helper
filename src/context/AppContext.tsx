@@ -148,9 +148,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       console.log('   prev:', prev);
       console.log('   prev.details:', prev?.details);
       console.log('   checkingFor:', `integration:${integrationId}`);
-      console.log('   Match?:', prev?.details === `integration:${integrationId}`);
+      const prevDetails = prev?.details?.toLowerCase();
+      const checkFor = `integration:${integrationId}`.toLowerCase();
+      console.log('   Match?:', prevDetails === checkFor);
       if (!prev) return prev;
-      if (prev.type === 'error' && prev.details === `integration:${integrationId}`) {
+      if (prev.type === 'error' && prevDetails === checkFor) {
         console.log('🟢 CANCELLING TRIGGER', { integrationId });
         cancelTriggerRef.current = true;
         return null;
