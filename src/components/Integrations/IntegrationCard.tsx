@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils';
 interface IntegrationCardProps {
   integration: Integration;
   onConnect: () => void;
+  onUserSolved?: () => void; // NEW: callback for user-solved integration
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -27,10 +28,21 @@ const iconMap: Record<string, React.ReactNode> = {
   ),
 };
 
-export function IntegrationCard({ integration, onConnect }: IntegrationCardProps) {
+export function IntegrationCard({ integration, onConnect, onUserSolved }: IntegrationCardProps) {
   const isConnecting = integration.status === 'connecting';
   const isError = integration.status === 'error';
   const isConnected = integration.status === 'connected';
+
+  const handleClick = () => {
+    if (isConnecting || isConnected) return;
+
+    onConnect();
+
+    // If the integration becomes connected after this click, mark it as solved
+    if (integration.status === 'connected' && onUserSolved) {
+      onUserSolved();
+    }
+  };
 
   return (
     <motion.div
@@ -72,7 +84,7 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
 
       <Button
         variant={isError ? 'destructive' : isConnected ? 'success' : 'default'}
-        onClick={onConnect}
+        onClick={handleClick}
         disabled={isConnecting || isConnected}
         className="w-full gap-2"
       >
