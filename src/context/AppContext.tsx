@@ -143,6 +143,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
 
+    // Salesforce always fails
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
@@ -150,6 +151,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    // HubSpot and Google Analytics: fail on first attempt, succeed on second
     if (attempt === 1) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
@@ -158,11 +160,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
+      // ✅ SUCCESS on second attempt - cancel any pending trigger
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
+      
+      // Cancel the pending trigger for this integration
       setPendingTrigger((prev) => {
         if (!prev) return prev;
-        if (prev.type === 'error' && prev.details && prev.details.endsWith(`:${integrationId}`)) return null;
+        if (prev.type === 'error' && prev.details === `integration:${integrationId}`) {
+          return null;
+        }
         return prev;
       });
     }
@@ -219,7 +226,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --------------------------
-  // HANDLE PENDING TRIGGERS - FIXED VERSION
+  // HANDLE PENDING TRIGGERS
   // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
@@ -228,12 +235,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       await new Promise(r => setTimeout(r, 10000));
 
-      // ✅ FIX: Check if integration is now connected BEFORE sending messages
+      // ✅ DOUBLE-CHECK: If integration connected during the delay, exit early
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [, integrationId] = pendingTrigger.details.split(':');
         const integrationNow = findIntegration(integrationId);
-        
-        // If the integration connected during the delay, don't send error messages
         if (integrationNow?.connected) {
           setPendingTrigger(null);
           isProcessingRef.current = false;
@@ -241,7 +246,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Now proceed with sending messages since integration is still not connected
+      // Send the messages
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [triggerType, integrationId] = pendingTrigger.details.split(':');
         
@@ -249,7 +254,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const integration = findIntegration(integrationId);
           const integrationName = integration?.name || integrationId;
           
-          // Send error message
           addChatMessage({
             role: 'assistant',
             content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
