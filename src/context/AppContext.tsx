@@ -229,23 +229,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --------------------------
-  // WATCHDOG: Cancel error triggers if integration connects
-  // --------------------------
-  useEffect(() => {
-    if (!pendingTrigger || pendingTrigger.type !== 'error' || !pendingTrigger.details) return;
-    
-    const [, integrationId] = pendingTrigger.details.split(':');
-    const integration = findIntegration(integrationId);
-    
-    // If the integration is now connected, cancel the pending trigger
-    if (integration?.connected) {
-      setPendingTrigger(null);
-      cancelTriggerRef.current = true;
-      isProcessingRef.current = false;
-    }
-  }, [integrations, pendingTrigger, findIntegration]);
-
-  // --------------------------
   // HANDLE PENDING TRIGGERS
   // --------------------------
   useEffect(() => {
