@@ -264,3 +264,4 @@ export function useAppContext() {
   if (!context) throw new Error('useAppContext must be used within AppProvider');
   return context;
 }
+export const useApp = useAppContext;
