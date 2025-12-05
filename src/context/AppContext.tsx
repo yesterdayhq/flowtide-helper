@@ -142,14 +142,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (currentIntegration?.connected) return;
 
     // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
-    console.log('🔵 connectIntegration called', { integrationId, attempt, hasPendingTrigger: !!pendingTrigger });
+    console.log('🔵 connectIntegration called', { integrationId, attempt, hasPendingTrigger: !!pendingTrigger, currentTrigger: pendingTrigger });
     setPendingTrigger((prev) => {
+      console.log('🔍 Checking if should cancel', { prev, checkingFor: `integration:${integrationId}` });
       if (!prev) return prev;
       if (prev.type === 'error' && prev.details === `integration:${integrationId}`) {
         console.log('🟢 CANCELLING TRIGGER', { integrationId });
         cancelTriggerRef.current = true;
         return null;
       }
+      console.log('⚠️ NOT CANCELLING - conditions not met');
       return prev;
     });
 
