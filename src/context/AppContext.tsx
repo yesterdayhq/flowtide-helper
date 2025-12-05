@@ -242,53 +242,75 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // --------------------------
   // HANDLE PENDING TRIGGERS
-  // --------------------------
-  useEffect(() => {
-    if (!pendingTrigger || isProcessingRef.current) return;
+// --------------------------
+useEffect(() => {
+  if (!pendingTrigger || isProcessingRef.current) return;
 
-    const handleTrigger = async () => {
-      console.log('🟡 handleTrigger START', { trigger: pendingTrigger });
-      isProcessingRef.current = true;
-      
-      // Store the current trigger details before the delay
-      const currentTrigger = { ...pendingTrigger };
-      
-      console.log('⏰ Starting 10 second delay...');
-      await new Promise(r => setTimeout(r, 10000));
-      console.log('⏰ 10 seconds elapsed');
+  const handleTrigger = async () => {
+    console.log('🟡 handleTrigger START', { trigger: pendingTrigger });
+    isProcessingRef.current = true;
 
-      // ✅ CHECK 0: Was this trigger cancelled?
-      console.log('🔍 CHECK 0: cancelTriggerRef =', cancelTriggerRef.current);
-      if (cancelTriggerRef.current) {
-        console.log('❌ EXITING: Trigger was cancelled');
+    // Store the current trigger details before the delay
+    const currentTrigger = { ...pendingTrigger };
+
+    console.log('⏰ Starting 10 second delay...');
+    await new Promise(r => setTimeout(r, 10000));
+    console.log('⏰ 10 seconds elapsed');
+
+    // ✅ CHECK 0: Was this trigger cancelled?
+    console.log('🔍 CHECK 0: cancelTriggerRef =', cancelTriggerRef.current);
+    if (cancelTriggerRef.current) {
+      console.log('❌ EXITING: Trigger was cancelled');
+      isProcessingRef.current = false;
+      cancelTriggerRef.current = false;
+      return;
+    }
+
+    // ✅ CHECK 1: Was the trigger cancelled during the delay?
+    console.log('🔍 CHECK 1: pendingTrigger =', pendingTrigger);
+    if (!pendingTrigger) {
+      console.log('❌ EXITING: pendingTrigger is null');
+      isProcessingRef.current = false;
+      return;
+    }
+
+    // Small delay to let state updates settle
+    await new Promise(r => setTimeout(r, 100));
+
+    // ✅ CHECK 2: If integration error, is it now connected?
+    if (currentTrigger.type === 'error' && currentTrigger.details) {
+      const [, integrationId] = currentTrigger.details.split(':');
+      const integrationNow = findIntegration(integrationId);
+      console.log('🔍 CHECK 2: integration connected?', { integrationId, connected: integrationNow?.connected });
+      if (integrationNow?.connected) {
+        console.log('❌ EXITING: Integration is now connected');
+        setPendingTrigger(null);
         isProcessingRef.current = false;
-        cancelTriggerRef.current = false;
         return;
       }
 
-      // ✅ CHECK 1: Was the trigger cancelled during the delay?
-      console.log('🔍 CHECK 1: pendingTrigger =', pendingTrigger);
-      if (!pendingTrigger) {
-        console.log('❌ EXITING: pendingTrigger is null');
+      // --- FIX: prevent sending duplicate error messages ---
+      if (!sentIntegrationErrorRef.current) sentIntegrationErrorRef.current = {};
+      if (sentIntegrationErrorRef.current[integrationId]) {
+        console.log(`❌ EXITING: Already sent error for ${integrationId}`);
+        setPendingTrigger(null);
         isProcessingRef.current = false;
         return;
       }
+    }
 
-      // Small delay to let state updates settle
-      await new Promise(r => setTimeout(r, 100));
+    // ... rest of your existing flow continues here (greeting, snippet, etc.)
 
-      // ✅ CHECK 2: If integration error, is it now connected?
-      if (currentTrigger.type === 'error' && currentTrigger.details) {
-        const [, integrationId] = currentTrigger.details.split(':');
-        const integrationNow = findIntegration(integrationId);
-        console.log('🔍 CHECK 2: integration connected?', { integrationId, connected: integrationNow?.connected });
-        if (integrationNow?.connected) {
-          console.log('❌ EXITING: Integration is now connected');
-          setPendingTrigger(null);
-          isProcessingRef.current = false;
-          return;
-        }
-      }
+    // After sending the messages, mark as sent
+    if (currentTrigger.type === 'error' && currentTrigger.details) {
+      const [, integrationId] = currentTrigger.details.split(':');
+      sentIntegrationErrorRef.current[integrationId] = true;
+    }
+  };
+
+  handleTrigger();
+}, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession, findIntegration]);
+
 
       console.log('✅ SENDING MESSAGES');
       // Send the messages
