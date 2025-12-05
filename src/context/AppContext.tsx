@@ -270,6 +270,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      // Small delay to let state updates settle
+      await new Promise(r => setTimeout(r, 100));
+
       // ✅ CHECK 2: If integration error, is it now connected?
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [, integrationId] = currentTrigger.details.split(':');
