@@ -131,4 +131,48 @@ export function ChatWidget() {
           >
             <MessageCircle className="h-6 w-6" />
             {chatMessages.length > 0 && (
-              <span className="absolute -right-1 -top-1 flex
+              <span className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] text-white">
+                {chatMessages.length}
+              </span>
+            )}
+          </motion.button>
+        )}
+      </AnimatePresence>
+
+      {isChatOpen && (
+        <motion.div
+          initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 30 }} transition={{ duration: 0.3 }}
+          className="fixed bottom-6 right-6 z-50 flex h-[500px] w-[350px] flex-col rounded-lg border bg-white shadow-lg"
+        >
+          <div className="flex items-center justify-between border-b px-4 py-2">
+            <span className="font-bold text-black">Lee</span>
+            <button onClick={() => setIsChatOpen(false)}><X className="h-5 w-5 text-gray-500" /></button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto p-4">
+            {chatMessages.map(msg => (
+              <div key={msg.id} className={cn("mb-2 rounded-lg px-2 py-1", msg.role === 'assistant' ? "bg-gray-200 text-black self-start" : "bg-blue-500 text-white self-end")}>
+                {msg.content}
+              </div>
+            ))}
+            {isTyping && <div className="text-gray-500">Lee is typing...</div>}
+            <div ref={messagesEndRef} />
+          </div>
+
+          <div className="border-t px-4 py-2">
+            <div className="flex gap-2">
+              <Input
+                ref={inputRef}
+                value={inputValue}
+                onChange={e => setInputValue(e.target.value)}
+                placeholder="Type a message..."
+                onKeyDown={e => { if (e.key === 'Enter') handleSend(); }}
+              />
+              <Button onClick={handleSend}><Send className="h-4 w-4" /></Button>
+            </div>
+          </div>
+        </motion.div>
+      )}
+    </>
+  );
+}
