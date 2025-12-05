@@ -253,14 +253,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
-      cancelTriggerRef.current = false;
       
       // Store the current trigger details before the delay
       const currentTrigger = { ...pendingTrigger };
       
       await new Promise(r => setTimeout(r, 10000));
 
-      // ✅ CHECK 0: Was this trigger cancelled by the watchdog?
+      // ✅ CHECK 0: Was this trigger cancelled?
       if (cancelTriggerRef.current) {
         isProcessingRef.current = false;
         cancelTriggerRef.current = false;
