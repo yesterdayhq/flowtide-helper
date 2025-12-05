@@ -274,7 +274,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       // Send the messages
       if (currentTrigger.type === 'error' && currentTrigger.details) {
-        const [triggerType, integrationId] = pendingTrigger.details.split(':');
+        const [triggerType, integrationId] = currentTrigger.details.split(':');
         
         if (triggerType === 'integration') {
           const integration = findIntegration(integrationId);
