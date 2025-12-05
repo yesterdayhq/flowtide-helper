@@ -137,8 +137,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const currentIntegration = integrations.find(i => i.id === integrationId);
 
-    // If already connected, skip Lee outreach
-    if (currentIntegration?.connected) return;
+    if (currentIntegration?.connected) {
+      // --- IMPORTANT: immediately clear pending trigger referencing this integration ---
+      setPendingTrigger((prev) => {
+        if (!prev) return prev;
+        if (prev.type === 'error' && prev.details?.endsWith(`:${integrationId}`)) {
+          // mark thread resolved if any
+          if (userSession.activeThread) {
+            updateUserSession({
+              activeThread: { ...userSession.activeThread, resolved: true, awaitingResponse: false, skipNextReply: false },
+            });
+          }
+          return null;
+        }
+        return prev;
+      });
+      return;
+    }
 
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
@@ -163,17 +178,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
 
-      // --- IMPORTANT: clear any pending trigger for this integration so delayed outreach won't fire ---
+      // immediately clear pending trigger referencing this integration
       setPendingTrigger((prev) => {
         if (!prev) return prev;
-        // if pending trigger references this integration, clear it
-        if (prev.type === 'error' && prev.details && prev.details.endsWith(`:${integrationId}`)) {
+        if (prev.type === 'error' && prev.details?.endsWith(`:${integrationId}`)) {
+          // mark thread resolved
+          if (userSession.activeThread) {
+            updateUserSession({
+              activeThread: { ...userSession.activeThread, resolved: true, awaitingResponse: false, skipNextReply: false },
+            });
+          }
           return null;
         }
         return prev;
       });
     }
-  }, [integrations]);
+  }, [integrations, userSession.activeThread, updateUserSession]);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
@@ -237,19 +257,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       // Wait 10s before sending outreach so user can fix UI error.
       await new Promise(r => setTimeout(r, 10000));
 
-      // --- NEW: If this pending trigger references an integration and that integration is now connected, bail out ---
+      // --- Clear if integration already connected ---
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [, integrationId] = pendingTrigger.details.split(':');
         const integrationNow = findIntegration(integrationId);
         if (integrationNow?.connected) {
-          // integration fixed — skip outreach
+          if (userSession.activeThread) {
+            updateUserSession({
+              activeThread: { ...userSession.activeThread, resolved: true, awaitingResponse: false, skipNextReply: false },
+            });
+          }
           setPendingTrigger(null);
           isProcessingRef.current = false;
           return;
         }
       }
 
-      // Existing salesforce special-case
+      // Salesforce special case
       if (pendingTrigger.type === 'error' && pendingTrigger.details?.endsWith(':salesforce')) {
         const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
         addChatMessage({ role: 'assistant', content: msg1 });
@@ -270,7 +294,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      // Greeting + non-salesforce error flow
+      // Greeting + error flow
       if (!userSession.greetingSentThisSession) {
         const greeting = !userSession.hasBeenIntroduced
           ? `Hi ${userSession.userName}, I'm Lee!`
@@ -283,37 +307,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setShowSnippet(false);
 
         updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
+      }
 
-        if (pendingTrigger.type === 'error' && pendingTrigger.details) {
-          const [, integrationId] = pendingTrigger.details.split(':');
-          const integration = findIntegration(integrationId);
-          // Double-check again before sending the follow-up question
-          if (integration?.connected) {
-            setPendingTrigger(null);
-            isProcessingRef.current = false;
-            return;
-          }
-
-          const integrationName = integration?.name || integrationId;
-          const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
-
-          addChatMessage({ role: 'assistant', content: errorMsg });
-          setSnippetMessage(errorMsg);
-          setShowSnippet(true);
-          await new Promise(r => setTimeout(r, 3000));
-          setShowSnippet(false);
-        }
-      } else {
-        // If greeting was already sent this session but pendingTrigger is an error, still re-check integration and send follow-up if needed
-        if (pendingTrigger.type === 'error' && pendingTrigger.details) {
-          const [, integrationId] = pendingTrigger.details.split(':');
-          const integration = findIntegration(integrationId);
-          if (integration?.connected) {
-            setPendingTrigger(null);
-            isProcessingRef.current = false;
-            return;
-          }
-
+      // Handle error follow-up
+      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
+        const [, integrationId] = pendingTrigger.details.split(':');
+        const integration = findIntegration(integrationId);
+        if (!integration?.connected) {
           const integrationName = integration?.name || integrationId;
           const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
           addChatMessage({ role: 'assistant', content: errorMsg });
