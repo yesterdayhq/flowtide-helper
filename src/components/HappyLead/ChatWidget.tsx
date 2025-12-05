@@ -23,6 +23,7 @@ export function ChatWidget() {
   } = useApp();
 
   const [inputValue, setInputValue] = useState('');
+  const [pendingTrigger, setPendingTrigger] = useState<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -44,27 +45,29 @@ export function ChatWidget() {
   }, [isChatOpen]);
 
   // --------------------------
-  // If integrations change (user connected one), auto-resolve error threads
-  // so Lee won't send the delayed outreach.
+  // Auto-resolve integration error threads
   // --------------------------
   useEffect(() => {
-    // If activeThread is an integration error, and HubSpot or GA is now connected,
-    // mark resolved / skip next reply.
     const activeThread = userSession.activeThread;
-    if (!activeThread || activeThread.type !== 'error') return;
+    if (!activeThread || (activeThread.type !== 'error' && activeThread.type !== 'stuck')) return;
 
     const hubspot = integrations.find((i) => i.id === 'hubspot');
     const ga = integrations.find((i) => i.id === 'google-analytics');
 
-    if ((hubspot && hubspot.connected) || (ga && ga.connected)) {
+    if ((hubspot?.connected || ga?.connected) && activeThread) {
       updateUserSession({
         activeThread: { ...activeThread, resolved: true, skipNextReply: true, awaitingResponse: false },
       });
+      // Clear any pending delayed messages
+      if (pendingTrigger) {
+        clearTimeout(pendingTrigger);
+        setPendingTrigger(null);
+      }
     }
-  }, [integrations, userSession.activeThread, updateUserSession]);
+  }, [integrations, userSession.activeThread, updateUserSession, pendingTrigger]);
 
   // --------------------------
-  // Stop replying if skipNextReply becomes true (safety)
+  // Safety: stop replying if skipNextReply is true
   // --------------------------
   useEffect(() => {
     const activeThread = userSession.activeThread;
@@ -76,33 +79,26 @@ export function ChatWidget() {
   }, [userSession.activeThread, updateUserSession]);
 
   // --------------------------
-  // Helper: auto-resolve thread if integration already connected
+  // Helper: mark integration resolved if already connected
   // --------------------------
   const markIntegrationResolvedIfConnected = () => {
     const activeThread = userSession.activeThread;
     if (!activeThread) return;
 
-    // Check real integrations state (not userSession properties)
     const hubspot = integrations.find((i) => i.id === 'hubspot');
     const ga = integrations.find((i) => i.id === 'google-analytics');
     const salesforce = integrations.find((i) => i.id === 'salesforce');
 
-    const anyConnected =
-      (hubspot && hubspot.connected) ||
-      (ga && ga.connected) ||
-      (salesforce && salesforce.connected);
+    const anyConnected = hubspot?.connected || ga?.connected || salesforce?.connected;
 
-    // If there's an active error/stuck thread and the integration got connected,
-    // mark it resolved and skip the next automated reply.
     if ((activeThread.type === 'error' || activeThread.type === 'stuck') && anyConnected) {
       updateUserSession({
-        activeThread: {
-          ...activeThread,
-          resolved: true,
-          skipNextReply: true,
-          awaitingResponse: false,
-        },
+        activeThread: { ...activeThread, resolved: true, skipNextReply: true, awaitingResponse: false },
       });
+      if (pendingTrigger) {
+        clearTimeout(pendingTrigger);
+        setPendingTrigger(null);
+      }
     }
   };
 
@@ -112,16 +108,12 @@ export function ChatWidget() {
   const handleSend = async () => {
     if (!inputValue.trim()) return;
 
-    // re-check integrations before replying so we don't reply if user fixed it
     markIntegrationResolvedIfConnected();
 
     const userMessage = inputValue.trim();
     setInputValue('');
 
-    addChatMessage({
-      role: 'user',
-      content: userMessage,
-    });
+    addChatMessage({ role: 'user', content: userMessage });
 
     const delay = () => new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
 
@@ -165,20 +157,11 @@ export function ChatWidget() {
     // --------------------------
     if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
       if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
-        addChatMessage({
-          role: 'assistant',
-          content: 'Great! Let me know if you need anything else.',
-        });
+        addChatMessage({ role: 'assistant', content: 'Great! Let me know if you need anything else.' });
       } else if (lowerMessage.includes('fail') || lowerMessage.includes('again') || lowerMessage.includes('still')) {
-        addChatMessage({
-          role: 'assistant',
-          content: "Got it — I'll get someone from our team to help troubleshoot.",
-        });
+        addChatMessage({ role: 'assistant', content: "Got it — I'll get someone from our team to help troubleshoot." });
       } else {
-        addChatMessage({
-          role: 'assistant',
-          content: 'Did connecting it work this time?',
-        });
+        addChatMessage({ role: 'assistant', content: 'Did connecting it work this time?' });
       }
       if (activeThread) {
         updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
@@ -196,15 +179,9 @@ export function ChatWidget() {
           content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
         });
       } else if (lowerMessage.includes('no') || lowerMessage.includes('good') || lowerMessage.includes('fine')) {
-        addChatMessage({
-          role: 'assistant',
-          content: "No problem — I'll be here if you need anything.",
-        });
+        addChatMessage({ role: 'assistant', content: "No problem — I'll be here if you need anything." });
       } else {
-        addChatMessage({
-          role: 'assistant',
-          content: 'Would you like a quick tip to help?',
-        });
+        addChatMessage({ role: 'assistant', content: 'Would you like a quick tip to help?' });
       }
       if (activeThread) {
         updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
@@ -227,10 +204,7 @@ export function ChatWidget() {
           content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
         });
       } else {
-        addChatMessage({
-          role: 'assistant',
-          content: 'Would you like to schedule a call or get some tips?',
-        });
+        addChatMessage({ role: 'assistant', content: 'Would you like to schedule a call or get some tips?' });
       }
       if (activeThread) {
         updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
@@ -242,25 +216,13 @@ export function ChatWidget() {
     // General conversation
     // --------------------------
     if (lowerMessage.includes('error') || lowerMessage.includes('broken')) {
-      addChatMessage({
-        role: 'assistant',
-        content: "Can you tell me what error you see or which page you're on?",
-      });
+      addChatMessage({ role: 'assistant', content: "Can you tell me what error you see or which page you're on?" });
     } else if (lowerMessage.includes('call') || lowerMessage.includes('schedule')) {
-      addChatMessage({
-        role: 'assistant',
-        content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
-      });
+      addChatMessage({ role: 'assistant', content: "Here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min" });
     } else if (lowerMessage.includes('tip') || lowerMessage.includes('help')) {
-      addChatMessage({
-        role: 'assistant',
-        content: "I'm here to help — which step are you on?",
-      });
+      addChatMessage({ role: 'assistant', content: "I'm here to help — which step are you on?" });
     } else {
-      addChatMessage({
-        role: 'assistant',
-        content: "I'm here to help with your demo — which step are you on?",
-      });
+      addChatMessage({ role: 'assistant', content: "I'm here to help with your demo — which step are you on?" });
     }
   };
 
@@ -269,7 +231,6 @@ export function ChatWidget() {
   // --------------------------
   const handleButtonClick = async (action: string) => {
     const delay = () => new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
-
     const activeThread = userSession.activeThread;
 
     setIsTyping(true);
@@ -282,10 +243,7 @@ export function ChatWidget() {
         content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
       });
     } else if (action === 'decline_help') {
-      addChatMessage({
-        role: 'assistant',
-        content: "No problem — I'll be here if you need anything.",
-      });
+      addChatMessage({ role: 'assistant', content: "No problem — I'll be here if you need anything." });
     } else if (action === 'schedule_call') {
       addChatMessage({
         role: 'assistant',
