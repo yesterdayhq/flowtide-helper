@@ -86,6 +86,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   const isProcessingRef = useRef(false);
+  // track attempts per integration
+  const integrationAttemptRef = useRef<Record<string, number>>({});
 
   // UPDATE USER SESSION
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
@@ -119,12 +121,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   // INTEGRATIONS
   const connectIntegration = useCallback(async (integrationId: string) => {
+    // ensure attempt counter exists
+    if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 0;
+    // increment attempt count
+    integrationAttemptRef.current[integrationId] += 1;
+    const attempt = integrationAttemptRef.current[integrationId];
+
+    // flip UI to connecting immediately so IntegrationCard shows loader
+    setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
+
+    // Short visible connecting delay so users see the connecting state
+    await new Promise((r) => setTimeout(r, 300));
+
+    // Salesforce: always error, triggers Salesforce-specific flow, never connects
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
+      // trigger pending trigger for Salesforce so ChatWidget/trigger handler can pick it up and run SF-specific messages
+      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
+      return;
+    }
+
+    // HubSpot & Google Analytics behavior:
+    // - attempt 1 -> fake error (UI shows error), trigger delayed Lee outreach
+    // - attempt 2+ -> succeed
+    if (attempt === 1) {
+      // first attempt fails
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
+      setIntegrationError({
+        id: integrationId,
+        message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.`,
+      });
+      // trigger the shared "integration error" flow (Lee reaches out after 10s)
+      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
+      // second+ attempt connects successfully
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
-      setIntegrationError(null);
+      // clear any existing integration error for this integration
+      setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
     }
   }, []);
 
@@ -169,6 +203,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsTyping(false);
     setPendingTrigger(null);
     isProcessingRef.current = false;
+    integrationAttemptRef.current = {};
     setShowSnippet(false);
     setSnippetMessage(null);
   }, []);
@@ -179,6 +214,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
+
+      // Wait 10s before sending any outreach so the user has time to see the UI error.
       await new Promise(r => setTimeout(r, 10000));
 
       const isSalesforceError =
@@ -199,6 +236,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
       } else {
+        // Shared greeting logic for non-Salesforce flows
         if (!userSession.greetingSentThisSession) {
           const greeting = !userSession.hasBeenIntroduced
             ? `Hi ${userSession.userName}, I'm Lee!`
