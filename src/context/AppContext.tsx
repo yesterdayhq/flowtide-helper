@@ -164,6 +164,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Salesforce always fails
     if (integrationId === 'salesforce') {
+      console.log('📛 Setting Salesforce error trigger');
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
@@ -172,6 +173,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // HubSpot and Google Analytics: fail on first attempt, succeed on second
     if (attempt === 1) {
+      console.log('📛 Setting error trigger (attempt 1)', { integrationId });
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
         id: integrationId,
