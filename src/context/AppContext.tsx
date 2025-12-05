@@ -219,7 +219,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --------------------------
-  // HANDLE PENDING TRIGGERS
+  // HANDLE PENDING TRIGGERS - FIXED VERSION
   // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
@@ -228,9 +228,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       await new Promise(r => setTimeout(r, 10000));
 
+      // ✅ FIX: Check if integration is now connected BEFORE sending messages
       if (pendingTrigger.type === 'error' && pendingTrigger.details) {
         const [, integrationId] = pendingTrigger.details.split(':');
         const integrationNow = findIntegration(integrationId);
+        
+        // If the integration connected during the delay, don't send error messages
         if (integrationNow?.connected) {
           setPendingTrigger(null);
           isProcessingRef.current = false;
@@ -238,7 +241,82 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // ...rest of trigger logic remains the same, only fires if integration not connected
+      // Now proceed with sending messages since integration is still not connected
+      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
+        const [triggerType, integrationId] = pendingTrigger.details.split(':');
+        
+        if (triggerType === 'integration') {
+          const integration = findIntegration(integrationId);
+          const integrationName = integration?.name || integrationId;
+          
+          // Send error message
+          addChatMessage({
+            role: 'assistant',
+            content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
+          });
+          
+          await new Promise(r => setTimeout(r, 2000));
+          
+          addChatMessage({
+            role: 'assistant',
+            content: "Sometimes OAuth connections can be finicky. Want to try connecting again?",
+            buttons: [
+              { label: "I'll try again", action: 'decline_help' },
+              { label: "It still doesn't work", action: 'escalate' },
+            ],
+          });
+
+          updateUserSession({
+            activeThread: {
+              type: 'error',
+              integration: integrationId,
+              resolved: false,
+              awaitingResponse: true,
+              skipNextReply: false,
+            },
+          });
+        }
+      } else if (pendingTrigger.type === 'stuck') {
+        const stepId = pendingTrigger.details;
+        
+        addChatMessage({
+          role: 'assistant',
+          content: "Hey Alex! I noticed you've been on this step for a bit. Need a hand?",
+          buttons: [
+            { label: "Yes, show me a tip", action: 'show_tip' },
+            { label: "No, I'm good", action: 'decline_help' },
+          ],
+        });
+
+        updateUserSession({
+          activeThread: {
+            type: 'stuck',
+            stepId,
+            resolved: false,
+            awaitingResponse: true,
+            skipNextReply: false,
+          },
+        });
+      } else if (pendingTrigger.type === 'happy') {
+        addChatMessage({
+          role: 'assistant',
+          content: "🎉 Nice work, Alex! You just published your first demo!\n\nWant to schedule a quick call to learn some pro tips?",
+          buttons: [
+            { label: "Sure, let's chat", action: 'schedule_call' },
+            { label: "Just send me tips", action: 'send_tips' },
+          ],
+        });
+
+        updateUserSession({
+          firstDemoCompleted: true,
+          activeThread: {
+            type: 'happy',
+            resolved: false,
+            awaitingResponse: true,
+            skipNextReply: false,
+          },
+        });
+      }
 
       setPendingTrigger(null);
       isProcessingRef.current = false;
