@@ -123,6 +123,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --------------------------
+  // Helpers
+  // --------------------------
+  const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
+
+  // --------------------------
   // INTEGRATIONS
   // --------------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
@@ -146,6 +151,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
 
     if (attempt === 1) {
+      // first attempt fails
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
         id: integrationId,
@@ -153,8 +159,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
+      // success on retry
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
+
+      // --- IMPORTANT: clear any pending trigger for this integration so delayed outreach won't fire ---
+      setPendingTrigger((prev) => {
+        if (!prev) return prev;
+        // if pending trigger references this integration, clear it
+        if (prev.type === 'error' && prev.details && prev.details.endsWith(`:${integrationId}`)) {
+          return null;
+        }
+        return prev;
+      });
     }
   }, [integrations]);
 
@@ -216,8 +233,23 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
+
+      // Wait 10s before sending outreach so user can fix UI error.
       await new Promise(r => setTimeout(r, 10000));
 
+      // --- NEW: If this pending trigger references an integration and that integration is now connected, bail out ---
+      if (pendingTrigger.type === 'error' && pendingTrigger.details) {
+        const [, integrationId] = pendingTrigger.details.split(':');
+        const integrationNow = findIntegration(integrationId);
+        if (integrationNow?.connected) {
+          // integration fixed — skip outreach
+          setPendingTrigger(null);
+          isProcessingRef.current = false;
+          return;
+        }
+      }
+
+      // Existing salesforce special-case
       if (pendingTrigger.type === 'error' && pendingTrigger.details?.endsWith(':salesforce')) {
         const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
         addChatMessage({ role: 'assistant', content: msg1 });
@@ -232,7 +264,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setShowSnippet(true);
         await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
-      } else if (!userSession.greetingSentThisSession) {
+
+        setPendingTrigger(null);
+        isProcessingRef.current = false;
+        return;
+      }
+
+      // Greeting + non-salesforce error flow
+      if (!userSession.greetingSentThisSession) {
         const greeting = !userSession.hasBeenIntroduced
           ? `Hi ${userSession.userName}, I'm Lee!`
           : `Hi ${userSession.userName}, nice to see you back!`;
@@ -247,9 +286,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         if (pendingTrigger.type === 'error' && pendingTrigger.details) {
           const [, integrationId] = pendingTrigger.details.split(':');
-          const integration = integrations.find(i => i.id === integrationId);
+          const integration = findIntegration(integrationId);
+          // Double-check again before sending the follow-up question
           if (integration?.connected) {
-            // Already connected, do not send error message
             setPendingTrigger(null);
             isProcessingRef.current = false;
             return;
@@ -264,8 +303,28 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           await new Promise(r => setTimeout(r, 3000));
           setShowSnippet(false);
         }
+      } else {
+        // If greeting was already sent this session but pendingTrigger is an error, still re-check integration and send follow-up if needed
+        if (pendingTrigger.type === 'error' && pendingTrigger.details) {
+          const [, integrationId] = pendingTrigger.details.split(':');
+          const integration = findIntegration(integrationId);
+          if (integration?.connected) {
+            setPendingTrigger(null);
+            isProcessingRef.current = false;
+            return;
+          }
+
+          const integrationName = integration?.name || integrationId;
+          const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
+          addChatMessage({ role: 'assistant', content: errorMsg });
+          setSnippetMessage(errorMsg);
+          setShowSnippet(true);
+          await new Promise(r => setTimeout(r, 3000));
+          setShowSnippet(false);
+        }
       }
 
+      // Stuck flow
       if (pendingTrigger.type === 'stuck') {
         const stuckMsg = `Noticed you might be stuck. Want a quick tip?`;
         addChatMessage({
@@ -282,6 +341,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setShowSnippet(false);
       }
 
+      // Happy flow
       if (pendingTrigger.type === 'happy') {
         const happyMsg = `Congrats on making your first demo! 🎉 Want me to schedule a quick call to help you get more value?`;
         addChatMessage({
@@ -305,7 +365,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     handleTrigger();
-  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession]);
+  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession, findIntegration]);
 
   return (
     <AppContext.Provider
