@@ -86,15 +86,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   } | null>(null);
 
   const isProcessingRef = useRef(false);
-  // track attempts per integration
   const integrationAttemptRef = useRef<Record<string, number>>({});
 
+  // --------------------------
   // UPDATE USER SESSION
+  // --------------------------
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
 
+  // --------------------------
   // DEMO FUNCTIONS
+  // --------------------------
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
     setDemo((prev) => {
       if (!prev) return prev;
@@ -119,52 +122,47 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
+  // --------------------------
   // INTEGRATIONS
+  // --------------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
-    // ensure attempt counter exists
     if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 0;
-    // increment attempt count
     integrationAttemptRef.current[integrationId] += 1;
     const attempt = integrationAttemptRef.current[integrationId];
 
-    // flip UI to connecting immediately so IntegrationCard shows loader
-    setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
+    const currentIntegration = integrations.find(i => i.id === integrationId);
 
-    // Short visible connecting delay so users see the connecting state
+    // If already connected, skip Lee outreach
+    if (currentIntegration?.connected) return;
+
+    setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
 
-    // Salesforce: always error, triggers Salesforce-specific flow, never connects
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
-      // trigger pending trigger for Salesforce so ChatWidget/trigger handler can pick it up and run SF-specific messages
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
       return;
     }
 
-    // HubSpot & Google Analytics behavior:
-    // - attempt 1 -> fake error (UI shows error), trigger delayed Lee outreach
-    // - attempt 2+ -> succeed
     if (attempt === 1) {
-      // first attempt fails
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
         id: integrationId,
         message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.`,
       });
-      // trigger the shared "integration error" flow (Lee reaches out after 10s)
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
-      // second+ attempt connects successfully
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
-      // clear any existing integration error for this integration
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
     }
-  }, []);
+  }, [integrations]);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
+  // --------------------------
   // CHAT FUNCTIONS
+  // --------------------------
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages(prev => [...prev, newMessage]);
@@ -175,7 +173,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
+  // --------------------------
   // TRIGGERS
+  // --------------------------
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
     setPendingTrigger({ type: 'error', details: `${type}:${details}` });
@@ -208,20 +208,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
-  // HANDLE PENDING TRIGGERS (10s delay, chat first, floater second)
+  // --------------------------
+  // HANDLE PENDING TRIGGERS
+  // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
       isProcessingRef.current = true;
-
-      // Wait 10s before sending any outreach so the user has time to see the UI error.
       await new Promise(r => setTimeout(r, 10000));
 
-      const isSalesforceError =
-        pendingTrigger.type === 'error' && pendingTrigger.details?.endsWith(':salesforce');
-
-      if (isSalesforceError) {
+      if (pendingTrigger.type === 'error' && pendingTrigger.details?.endsWith(':salesforce')) {
         const msg1 = `Hi, ${userSession.userName}, I'm Lee, with Flowtide - we noticed an issue with your Salesforce connection.`;
         addChatMessage({ role: 'assistant', content: msg1 });
         setSnippetMessage(msg1);
@@ -235,25 +232,29 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setShowSnippet(true);
         await new Promise(r => setTimeout(r, 3000));
         setShowSnippet(false);
-      } else {
-        // Shared greeting logic for non-Salesforce flows
-        if (!userSession.greetingSentThisSession) {
-          const greeting = !userSession.hasBeenIntroduced
-            ? `Hi ${userSession.userName}, I'm Lee!`
-            : `Hi ${userSession.userName}, nice to see you back!`;
+      } else if (!userSession.greetingSentThisSession) {
+        const greeting = !userSession.hasBeenIntroduced
+          ? `Hi ${userSession.userName}, I'm Lee!`
+          : `Hi ${userSession.userName}, nice to see you back!`;
 
-          addChatMessage({ role: 'assistant', content: greeting });
-          setSnippetMessage(greeting);
-          setShowSnippet(true);
-          await new Promise(r => setTimeout(r, 3000));
-          setShowSnippet(false);
+        addChatMessage({ role: 'assistant', content: greeting });
+        setSnippetMessage(greeting);
+        setShowSnippet(true);
+        await new Promise(r => setTimeout(r, 3000));
+        setShowSnippet(false);
 
-          updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
-        }
+        updateUserSession({ hasBeenIntroduced: true, greetingSentThisSession: true });
 
         if (pendingTrigger.type === 'error' && pendingTrigger.details) {
           const [, integrationId] = pendingTrigger.details.split(':');
           const integration = integrations.find(i => i.id === integrationId);
+          if (integration?.connected) {
+            // Already connected, do not send error message
+            setPendingTrigger(null);
+            isProcessingRef.current = false;
+            return;
+          }
+
           const integrationName = integration?.name || integrationId;
           const errorMsg = `It looks like you ran into an error while connecting ${integrationName}. Can you try connecting it again?`;
 
