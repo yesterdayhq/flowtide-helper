@@ -127,7 +127,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentIntegration = integrations.find(i => i.id === integrationId);
     if (currentIntegration?.connected) return;
 
-    // Cancel pending trigger for this integration
     setPendingTrigger((prev) => {
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
@@ -212,7 +211,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const currentTrigger = { ...pendingTrigger };
       const integrationId = currentTrigger.details?.split(':')[1];
 
-      await new Promise(r => setTimeout(r, 10000));
+      await new Promise(r => setTimeout(r, 1000));
 
       if ((integrationId && cancelTriggerRef.current[integrationId]) || !pendingTrigger) {
         if (integrationId) cancelTriggerRef.current[integrationId] = false;
@@ -236,12 +235,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (integrationNowId === 'salesforce') {
             addChatMessage({
               role: 'assistant',
-              content: "Hey, Alex, I noticed you ran into an error when trying to connect Salesforce.",
+              content: "Hey Alex! Looks like there was an issue connecting Salesforce.",
             });
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 1500));
             addChatMessage({
               role: 'assistant',
-              content: "We’re aware of the issue and are working on a fix. We’ll reach out once it’s fixed.",
+              content: "No worries — our team is on it and we’ll let you know once it’s resolved.",
+            });
+          } else if (integrationNowId === 'hubspot') {
+            addChatMessage({
+              role: 'assistant',
+              content: "Hi Alex, I'm Lee! It looks like you ran into an error while connecting HubSpot.",
+            });
+            await new Promise(r => setTimeout(r, 1500));
+            addChatMessage({
+              role: 'assistant',
+              content: "Check that your HubSpot account permissions are correct, and try again. Let me know if you need help!",
+            });
+          } else if (integrationNowId === 'google-analytics') {
+            addChatMessage({
+              role: 'assistant',
+              content: "Hi Alex, connecting Google Analytics didn’t go through.",
+            });
+            await new Promise(r => setTimeout(r, 1500));
+            addChatMessage({
+              role: 'assistant',
+              content: "Please ensure your GA account is active and you have proper access. Try reconnecting afterwards.",
             });
           } else {
             addChatMessage({
