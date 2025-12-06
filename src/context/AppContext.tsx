@@ -71,30 +71,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [integrationError, setIntegrationError] = useState<{ id: string; message: string } | null>(null);
-
   const [userSession, setUserSession] = useState<UserSession>(defaultUserSession);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
-
   const [showSnippet, setShowSnippet] = useState(false);
   const [snippetMessage, setSnippetMessage] = useState<string | null>(null);
-
-  const [pendingTrigger, setPendingTrigger] = useState<{
-    type: 'error' | 'stuck' | 'happy';
-    details?: string;
-  } | null>(null);
+  const [pendingTrigger, setPendingTrigger] = useState<{ type: 'error' | 'stuck' | 'happy'; details?: string } | null>(null);
 
   const isProcessingRef = useRef(false);
   const integrationAttemptRef = useRef<Record<string, number>>({});
   const cancelTriggerRef = useRef<Record<string, boolean>>({});
 
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
-    setUserSession((prev) => ({ ...prev, ...updates }));
+    setUserSession(prev => ({ ...prev, ...updates }));
   }, []);
 
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
-    setDemo((prev) => {
+    setDemo(prev => {
       if (!prev) return prev;
       const newStep: DemoStep = { id: crypto.randomUUID(), order: prev.steps.length + 1, imageUrl, annotation, createdAt: new Date() };
       return { ...prev, steps: [...prev.steps, newStep], updatedAt: new Date() };
@@ -102,19 +96,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateStep = useCallback((stepId: string, updates: Partial<DemoStep>) => {
-    setDemo((prev) => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, ...updates } : s), updatedAt: new Date() } : prev);
+    setDemo(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, ...updates } : s), updatedAt: new Date() } : prev);
   }, []);
 
   const removeStep = useCallback((stepId: string) => {
-    setDemo((prev) => prev ? { ...prev, steps: prev.steps.filter(s => s.id !== stepId).map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
+    setDemo(prev => prev ? { ...prev, steps: prev.steps.filter(s => s.id !== stepId).map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
   }, []);
 
   const reorderSteps = useCallback((newOrder: DemoStep[]) => {
-    setDemo((prev) => prev ? { ...prev, steps: newOrder.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
+    setDemo(prev => prev ? { ...prev, steps: newOrder.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
   }, []);
 
   const publishDemo = useCallback(() => {
-    setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
+    setDemo(prev => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
   const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
@@ -127,7 +121,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentIntegration = integrations.find(i => i.id === integrationId);
     if (currentIntegration?.connected) return;
 
-    setPendingTrigger((prev) => {
+    setPendingTrigger(prev => {
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
       if (!prev) return prev;
@@ -139,7 +133,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     });
 
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise(r => setTimeout(r, 300));
 
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
@@ -154,7 +148,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
-      setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
+      setIntegrationError(prev => (prev && prev.id === integrationId ? null : prev));
     }
   }, [integrations]);
 
@@ -163,6 +157,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages(prev => [...prev, newMessage]);
+  }, []);
+
+  // --- NEW helper for async sequential messages ---
+  const sendAssistantMessage = useCallback(async (content: string) => {
+    const newMessage: ChatMessage = { id: crypto.randomUUID(), role: 'assistant', content, timestamp: new Date() };
+    setChatMessages(prev => [...prev, newMessage]);
+    await new Promise(r => setTimeout(r, 50));
   }, []);
 
   const clearSnippet = useCallback(() => {
@@ -203,6 +204,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
+  // --- useEffect with sequential assistant messages ---
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
@@ -233,40 +235,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const integrationName = integration?.name || integrationNowId;
 
           if (integrationNowId === 'salesforce') {
-            addChatMessage({
-              role: 'assistant',
-              content: "Hey Alex! Looks like there was an issue connecting Salesforce.",
-            });
-            await new Promise(r => setTimeout(r, 1500));
-            addChatMessage({
-              role: 'assistant',
-              content: "No worries — our team is on it and we’ll let you know once it’s resolved.",
-            });
+            await sendAssistantMessage("Hey Alex! Looks like there was an issue connecting Salesforce.");
+            await sendAssistantMessage("No worries — our team is on it and we’ll let you know once it’s resolved.");
           } else if (integrationNowId === 'hubspot') {
-            addChatMessage({
-              role: 'assistant',
-              content: "Hi Alex, I'm Lee! It looks like you ran into an error while connecting HubSpot.",
-            });
-            await new Promise(r => setTimeout(r, 1500));
-            addChatMessage({
-              role: 'assistant',
-              content: "Check that your HubSpot account permissions are correct, and try again. Let me know if you need help!",
-            });
+            await sendAssistantMessage("Hi Alex, I'm Lee! It looks like you ran into an error while connecting HubSpot.");
+            await sendAssistantMessage("Check that your HubSpot account permissions are correct, and try again. Let me know if you need help!");
           } else if (integrationNowId === 'google-analytics') {
-            addChatMessage({
-              role: 'assistant',
-              content: "Hi Alex, connecting Google Analytics didn’t go through.",
-            });
-            await new Promise(r => setTimeout(r, 1500));
-            addChatMessage({
-              role: 'assistant',
-              content: "Please ensure your GA account is active and you have proper access. Try reconnecting afterwards.",
-            });
+            await sendAssistantMessage("Hi Alex, connecting Google Analytics didn’t go through.");
+            await sendAssistantMessage("Please ensure your GA account is active and you have proper access. Try reconnecting afterwards.");
           } else {
-            addChatMessage({
-              role: 'assistant',
-              content: `Hi Alex, I'm Lee! It looks like you ran into an error while connecting ${integrationName}.`,
-            });
+            await sendAssistantMessage(`Hi Alex, I'm Lee! It looks like you ran into an error while connecting ${integrationName}.`);
           }
         }
       }
@@ -277,7 +255,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     handleTrigger();
-  }, [pendingTrigger, findIntegration, addChatMessage]);
+  }, [pendingTrigger, findIntegration, sendAssistantMessage]);
 
   return (
     <AppContext.Provider
