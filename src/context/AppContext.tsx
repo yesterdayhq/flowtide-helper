@@ -87,18 +87,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const isProcessingRef = useRef(false);
   const integrationAttemptRef = useRef<Record<string, number>>({});
-  const cancelTriggerRef = useRef<Record<string, boolean>>({}); // per-integration cancel
+  const cancelTriggerRef = useRef<Record<string, boolean>>({});
 
-  // --------------------------
-  // UPDATE USER SESSION
-  // --------------------------
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  // --------------------------
-  // DEMO FUNCTIONS
-  // --------------------------
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
     setDemo((prev) => {
       if (!prev) return prev;
@@ -123,14 +117,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
-  // --------------------------
-  // HELPERS
-  // --------------------------
   const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
 
-  // --------------------------
-  // INTEGRATIONS
-  // --------------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
     if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 0;
     integrationAttemptRef.current[integrationId] += 1;
@@ -139,7 +127,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentIntegration = integrations.find(i => i.id === integrationId);
     if (currentIntegration?.connected) return;
 
-    // ✅ CANCEL TRIGGER: now per-integration
+    // Cancel pending trigger for this integration
     setPendingTrigger((prev) => {
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
@@ -154,7 +142,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
 
-    // Salesforce always fails
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
@@ -162,13 +149,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // HubSpot and GA: fail first attempt, succeed second
     if (attempt === 1) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({
-        id: integrationId,
-        message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.`,
-      });
+      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.` });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
@@ -178,9 +161,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
-  // --------------------------
-  // CHAT FUNCTIONS
-  // --------------------------
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages(prev => [...prev, newMessage]);
@@ -191,9 +171,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
-  // --------------------------
-  // TRIGGERS
-  // --------------------------
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
     setPendingTrigger({ type: 'error', details: `${type}:${details}` });
@@ -227,9 +204,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
-  // --------------------------
-  // HANDLE PENDING TRIGGERS
-  // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
@@ -246,110 +220,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      await new Promise(r => setTimeout(r, 100));
-
       if (currentTrigger.type === 'error' && currentTrigger.details) {
-        const [, integrationNowId] = currentTrigger.details.split(':');
+        const [triggerType, integrationNowId] = currentTrigger.details.split(':');
         const integrationNow = findIntegration(integrationNowId);
         if (integrationNow?.connected) {
           setPendingTrigger(null);
           isProcessingRef.current = false;
           return;
         }
-      }
 
-      // --------------------------
-      // SEND MESSAGES
-      // --------------------------
-      if (currentTrigger.type === 'error' && currentTrigger.details) {
-        const [triggerType, integrationId] = currentTrigger.details.split(':');
         if (triggerType === 'integration') {
-          const integration = findIntegration(integrationId);
-          const integrationName = integration?.name || integrationId;
+          const integration = findIntegration(integrationNowId);
+          const integrationName = integration?.name || integrationNowId;
 
-          if (integrationId === 'salesforce') {
+          if (integrationNowId === 'salesforce') {
             addChatMessage({
               role: 'assistant',
-              content: "Hey, Alex, I’m Lee from Flowtide. I noticed you ran into an error when trying to connect to Salesforce.",
+              content: "Hey, Alex, I noticed you ran into an error when trying to connect Salesforce.",
             });
             await new Promise(r => setTimeout(r, 2000));
             addChatMessage({
               role: 'assistant',
-              content: "We’re aware of the issue and are working on a fix. We apologize for that. We’ll reach out once it’s fixed.",
-            });
-
-            updateUserSession({
-              activeThread: {
-                type: 'error',
-                integration: integrationId,
-                resolved: false,
-                awaitingResponse: true,
-                skipNextReply: false,
-              },
+              content: "We’re aware of the issue and are working on a fix. We’ll reach out once it’s fixed.",
             });
           } else {
             addChatMessage({
               role: 'assistant',
-              content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
-            });
-            await new Promise(r => setTimeout(r, 2000));
-            addChatMessage({
-              role: 'assistant',
-              content: "Sometimes OAuth connections can be finicky. Want to try connecting again?",
-              buttons: [
-                { label: "I'll try again", action: 'decline_help' },
-                { label: "It still doesn't work", action: 'escalate' },
-              ],
-            });
-
-            updateUserSession({
-              activeThread: {
-                type: 'error',
-                integration: integrationId,
-                resolved: false,
-                awaitingResponse: true,
-                skipNextReply: false,
-              },
+              content: `Hi Alex, I'm Lee! It looks like you ran into an error while connecting ${integrationName}.`,
             });
           }
         }
-      } else if (pendingTrigger.type === 'stuck') {
-        const stepId = pendingTrigger.details;
-        addChatMessage({
-          role: 'assistant',
-          content: "Hey Alex! I noticed you've been on this step for a bit. Need a hand?",
-          buttons: [
-            { label: "Yes, show me a tip", action: 'show_tip' },
-            { label: "No, I'm good", action: 'decline_help' },
-          ],
-        });
-        updateUserSession({
-          activeThread: {
-            type: 'stuck',
-            stepId,
-            resolved: false,
-            awaitingResponse: true,
-            skipNextReply: false,
-          },
-        });
-      } else if (pendingTrigger.type === 'happy') {
-        addChatMessage({
-          role: 'assistant',
-          content: "🎉 Nice work, Alex! You just published your first demo!\n\nWant to schedule a quick call to learn some pro tips?",
-          buttons: [
-            { label: "Sure, let's chat", action: 'schedule_call' },
-            { label: "Just send me tips", action: 'send_tips' },
-          ],
-        });
-        updateUserSession({
-          firstDemoCompleted: true,
-          activeThread: {
-            type: 'happy',
-            resolved: false,
-            awaitingResponse: true,
-            skipNextReply: false,
-          },
-        });
       }
 
       if (integrationId) cancelTriggerRef.current[integrationId] = false;
@@ -358,7 +258,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     handleTrigger();
-  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession, findIntegration]);
+  }, [pendingTrigger, findIntegration, addChatMessage]);
 
   return (
     <AppContext.Provider
