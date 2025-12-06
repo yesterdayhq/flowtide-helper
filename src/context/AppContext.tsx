@@ -71,24 +71,36 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const [integrations, setIntegrations] = useState<Integration[]>(defaultIntegrations);
   const [integrationError, setIntegrationError] = useState<{ id: string; message: string } | null>(null);
+
   const [userSession, setUserSession] = useState<UserSession>(defaultUserSession);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
+
   const [showSnippet, setShowSnippet] = useState(false);
   const [snippetMessage, setSnippetMessage] = useState<string | null>(null);
-  const [pendingTrigger, setPendingTrigger] = useState<{ type: 'error' | 'stuck' | 'happy'; details?: string } | null>(null);
+
+  const [pendingTrigger, setPendingTrigger] = useState<{
+    type: 'error' | 'stuck' | 'happy';
+    details?: string;
+  } | null>(null);
 
   const isProcessingRef = useRef(false);
   const integrationAttemptRef = useRef<Record<string, number>>({});
-  const cancelTriggerRef = useRef<Record<string, boolean>>({});
+  const cancelTriggerRef = useRef(false);
 
+  // --------------------------
+  // UPDATE USER SESSION
+  // --------------------------
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
-    setUserSession(prev => ({ ...prev, ...updates }));
+    setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
 
+  // --------------------------
+  // DEMO FUNCTIONS
+  // --------------------------
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
-    setDemo(prev => {
+    setDemo((prev) => {
       if (!prev) return prev;
       const newStep: DemoStep = { id: crypto.randomUUID(), order: prev.steps.length + 1, imageUrl, annotation, createdAt: new Date() };
       return { ...prev, steps: [...prev.steps, newStep], updatedAt: new Date() };
@@ -96,74 +108,95 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateStep = useCallback((stepId: string, updates: Partial<DemoStep>) => {
-    setDemo(prev => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, ...updates } : s), updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, steps: prev.steps.map(s => s.id === stepId ? { ...s, ...updates } : s), updatedAt: new Date() } : prev);
   }, []);
 
   const removeStep = useCallback((stepId: string) => {
-    setDemo(prev => prev ? { ...prev, steps: prev.steps.filter(s => s.id !== stepId).map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, steps: prev.steps.filter(s => s.id !== stepId).map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
   }, []);
 
   const reorderSteps = useCallback((newOrder: DemoStep[]) => {
-    setDemo(prev => prev ? { ...prev, steps: newOrder.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, steps: newOrder.map((s, idx) => ({ ...s, order: idx + 1 })), updatedAt: new Date() } : prev);
   }, []);
 
   const publishDemo = useCallback(() => {
-    setDemo(prev => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
+    setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
+  // --------------------------
+  // HELPERS
+  // --------------------------
   const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
 
+  // --------------------------
+  // INTEGRATIONS
+  // --------------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
     if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 0;
     integrationAttemptRef.current[integrationId] += 1;
     const attempt = integrationAttemptRef.current[integrationId];
 
     const currentIntegration = integrations.find(i => i.id === integrationId);
+
+    // If already connected, skip Lee outreach
     if (currentIntegration?.connected) return;
 
-    setPendingTrigger(prev => {
+    // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
+    console.log('🔵 connectIntegration called', { integrationId, attempt, hasPendingTrigger: !!pendingTrigger, currentTrigger: pendingTrigger });
+    setPendingTrigger((prev) => {
+      console.log('🔍 Checking if should cancel');
+      console.log('   prev:', prev);
+      console.log('   prev.details:', prev?.details);
+      console.log('   checkingFor:', `integration:${integrationId}`);
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
+      console.log('   Match?:', prevDetails === checkFor);
       if (!prev) return prev;
       if (prev.type === 'error' && prevDetails === checkFor) {
-        cancelTriggerRef.current[integrationId] = true;
+        console.log('🟢 CANCELLING TRIGGER', { integrationId });
+        cancelTriggerRef.current = true;
         return null;
       }
+      console.log('⚠️ NOT CANCELLING - conditions not met');
       return prev;
     });
 
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
-    await new Promise(r => setTimeout(r, 300));
+    await new Promise((r) => setTimeout(r, 300));
 
+    // Salesforce always fails
     if (integrationId === 'salesforce') {
+      console.log('📛 Setting Salesforce error trigger');
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
       return;
     }
 
+    // HubSpot and Google Analytics: fail on first attempt, succeed on second
     if (attempt === 1) {
+      console.log('📛 Setting error trigger (attempt 1)', { integrationId });
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
-      setIntegrationError({ id: integrationId, message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.` });
+      setIntegrationError({
+        id: integrationId,
+        message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.`,
+      });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
+      // ✅ SUCCESS on second attempt
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
-      setIntegrationError(prev => (prev && prev.id === integrationId ? null : prev));
+      setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
     }
   }, [integrations]);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
+  // --------------------------
+  // CHAT FUNCTIONS
+  // --------------------------
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages(prev => [...prev, newMessage]);
-  }, []);
-
-  // --- NEW helper for async sequential messages ---
-  const sendAssistantMessage = useCallback(async (content: string) => {
-    const newMessage: ChatMessage = { id: crypto.randomUUID(), role: 'assistant', content, timestamp: new Date() };
-    setChatMessages(prev => [...prev, newMessage]);
-    await new Promise(r => setTimeout(r, 50));
   }, []);
 
   const clearSnippet = useCallback(() => {
@@ -171,6 +204,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
+  // --------------------------
+  // TRIGGERS
+  // --------------------------
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
     setPendingTrigger({ type: 'error', details: `${type}:${details}` });
@@ -198,64 +234,145 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIsTyping(false);
     setPendingTrigger(null);
     isProcessingRef.current = false;
-    cancelTriggerRef.current = {};
+    cancelTriggerRef.current = false;
     integrationAttemptRef.current = {};
     setShowSnippet(false);
     setSnippetMessage(null);
   }, []);
 
-  // --- useEffect with sequential assistant messages ---
+  // --------------------------
+  // HANDLE PENDING TRIGGERS
+  // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
+      console.log('🟡 handleTrigger START', { trigger: pendingTrigger });
       isProcessingRef.current = true;
+      
+      // Store the current trigger details before the delay
       const currentTrigger = { ...pendingTrigger };
-      const integrationId = currentTrigger.details?.split(':')[1];
+      
+      console.log('⏰ Starting 10 second delay...');
+      await new Promise(r => setTimeout(r, 10000));
+      console.log('⏰ 10 seconds elapsed');
 
-      await new Promise(r => setTimeout(r, 1000));
+      // ✅ CHECK 0: Was this trigger cancelled?
+      console.log('🔍 CHECK 0: cancelTriggerRef =', cancelTriggerRef.current);
+      if (cancelTriggerRef.current) {
+        console.log('❌ EXITING: Trigger was cancelled');
+        isProcessingRef.current = false;
+        cancelTriggerRef.current = false;
+        return;
+      }
 
-      if ((integrationId && cancelTriggerRef.current[integrationId]) || !pendingTrigger) {
-        if (integrationId) cancelTriggerRef.current[integrationId] = false;
+      // ✅ CHECK 1: Was the trigger cancelled during the delay?
+      console.log('🔍 CHECK 1: pendingTrigger =', pendingTrigger);
+      if (!pendingTrigger) {
+        console.log('❌ EXITING: pendingTrigger is null');
         isProcessingRef.current = false;
         return;
       }
 
+      // Small delay to let state updates settle
+      await new Promise(r => setTimeout(r, 100));
+
+      // ✅ CHECK 2: If integration error, is it now connected?
       if (currentTrigger.type === 'error' && currentTrigger.details) {
-        const [triggerType, integrationNowId] = currentTrigger.details.split(':');
-        const integrationNow = findIntegration(integrationNowId);
+        const [, integrationId] = currentTrigger.details.split(':');
+        const integrationNow = findIntegration(integrationId);
+        console.log('🔍 CHECK 2: integration connected?', { integrationId, connected: integrationNow?.connected });
         if (integrationNow?.connected) {
+          console.log('❌ EXITING: Integration is now connected');
           setPendingTrigger(null);
           isProcessingRef.current = false;
           return;
         }
-
-        if (triggerType === 'integration') {
-          const integration = findIntegration(integrationNowId);
-          const integrationName = integration?.name || integrationNowId;
-
-          if (integrationNowId === 'salesforce') {
-            await sendAssistantMessage("Hey Alex! Looks like there was an issue connecting Salesforce.");
-            await sendAssistantMessage("No worries — our team is on it and we’ll let you know once it’s resolved.");
-          } else if (integrationNowId === 'hubspot') {
-            await sendAssistantMessage("Hi Alex, I'm Lee! It looks like you ran into an error while connecting HubSpot.");
-            await sendAssistantMessage("Check that your HubSpot account permissions are correct, and try again. Let me know if you need help!");
-          } else if (integrationNowId === 'google-analytics') {
-            await sendAssistantMessage("Hi Alex, connecting Google Analytics didn’t go through.");
-            await sendAssistantMessage("Please ensure your GA account is active and you have proper access. Try reconnecting afterwards.");
-          } else {
-            await sendAssistantMessage(`Hi Alex, I'm Lee! It looks like you ran into an error while connecting ${integrationName}.`);
-          }
-        }
       }
 
-      if (integrationId) cancelTriggerRef.current[integrationId] = false;
+      console.log('✅ SENDING MESSAGES');
+      // Send the messages
+      if (currentTrigger.type === 'error' && currentTrigger.details) {
+        const [triggerType, integrationId] = currentTrigger.details.split(':');
+        
+        if (triggerType === 'integration') {
+          const integration = findIntegration(integrationId);
+          const integrationName = integration?.name || integrationId;
+          
+          addChatMessage({
+            role: 'assistant',
+            content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
+          });
+          
+          await new Promise(r => setTimeout(r, 2000));
+          
+          addChatMessage({
+            role: 'assistant',
+            content: "Sometimes OAuth connections can be finicky. Want to try connecting again?",
+            buttons: [
+              { label: "I'll try again", action: 'decline_help' },
+              { label: "It still doesn't work", action: 'escalate' },
+            ],
+          });
+
+          updateUserSession({
+            activeThread: {
+              type: 'error',
+              integration: integrationId,
+              resolved: false,
+              awaitingResponse: true,
+              skipNextReply: false,
+            },
+          });
+        }
+      } else if (pendingTrigger.type === 'stuck') {
+        const stepId = pendingTrigger.details;
+        
+        addChatMessage({
+          role: 'assistant',
+          content: "Hey Alex! I noticed you've been on this step for a bit. Need a hand?",
+          buttons: [
+            { label: "Yes, show me a tip", action: 'show_tip' },
+            { label: "No, I'm good", action: 'decline_help' },
+          ],
+        });
+
+        updateUserSession({
+          activeThread: {
+            type: 'stuck',
+            stepId,
+            resolved: false,
+            awaitingResponse: true,
+            skipNextReply: false,
+          },
+        });
+      } else if (pendingTrigger.type === 'happy') {
+        addChatMessage({
+          role: 'assistant',
+          content: "🎉 Nice work, Alex! You just published your first demo!\n\nWant to schedule a quick call to learn some pro tips?",
+          buttons: [
+            { label: "Sure, let's chat", action: 'schedule_call' },
+            { label: "Just send me tips", action: 'send_tips' },
+          ],
+        });
+
+        updateUserSession({
+          firstDemoCompleted: true,
+          activeThread: {
+            type: 'happy',
+            resolved: false,
+            awaitingResponse: true,
+            skipNextReply: false,
+          },
+        });
+      }
+
       setPendingTrigger(null);
       isProcessingRef.current = false;
     };
 
     handleTrigger();
-  }, [pendingTrigger, findIntegration, sendAssistantMessage]);
+  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession, findIntegration]);
 
   return (
     <AppContext.Provider
