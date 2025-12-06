@@ -142,22 +142,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (currentIntegration?.connected) return;
 
     // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
-    console.log('🔵 connectIntegration called', { integrationId, attempt, hasPendingTrigger: !!pendingTrigger, currentTrigger: pendingTrigger });
     setPendingTrigger((prev) => {
-      console.log('🔍 Checking if should cancel');
-      console.log('   prev:', prev);
-      console.log('   prev.details:', prev?.details);
-      console.log('   checkingFor:', `integration:${integrationId}`);
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
-      console.log('   Match?:', prevDetails === checkFor);
       if (!prev) return prev;
       if (prev.type === 'error' && prevDetails === checkFor) {
-        console.log('🟢 CANCELLING TRIGGER', { integrationId });
         cancelTriggerRef.current = true;
         return null;
       }
-      console.log('⚠️ NOT CANCELLING - conditions not met');
       return prev;
     });
 
@@ -166,7 +158,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Salesforce always fails
     if (integrationId === 'salesforce') {
-      console.log('📛 Setting Salesforce error trigger');
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
@@ -175,7 +166,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // HubSpot and Google Analytics: fail on first attempt, succeed on second
     if (attempt === 1) {
-      console.log('📛 Setting error trigger (attempt 1)', { integrationId });
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
         id: integrationId,
@@ -247,87 +237,91 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!pendingTrigger || isProcessingRef.current) return;
 
     const handleTrigger = async () => {
-      console.log('🟡 handleTrigger START', { trigger: pendingTrigger });
       isProcessingRef.current = true;
-      
-      // Store the current trigger details before the delay
       const currentTrigger = { ...pendingTrigger };
-      
-      console.log('⏰ Starting 10 second delay...');
-      await new Promise(r => setTimeout(r, 10000));
-      console.log('⏰ 10 seconds elapsed');
 
-      // ✅ CHECK 0: Was this trigger cancelled?
-      console.log('🔍 CHECK 0: cancelTriggerRef =', cancelTriggerRef.current);
-      if (cancelTriggerRef.current) {
-        console.log('❌ EXITING: Trigger was cancelled');
+      await new Promise(r => setTimeout(r, 10000));
+
+      if (cancelTriggerRef.current || !pendingTrigger) {
         isProcessingRef.current = false;
         cancelTriggerRef.current = false;
         return;
       }
 
-      // ✅ CHECK 1: Was the trigger cancelled during the delay?
-      console.log('🔍 CHECK 1: pendingTrigger =', pendingTrigger);
-      if (!pendingTrigger) {
-        console.log('❌ EXITING: pendingTrigger is null');
-        isProcessingRef.current = false;
-        return;
-      }
-
-      // Small delay to let state updates settle
       await new Promise(r => setTimeout(r, 100));
 
-      // ✅ CHECK 2: If integration error, is it now connected?
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [, integrationId] = currentTrigger.details.split(':');
         const integrationNow = findIntegration(integrationId);
-        console.log('🔍 CHECK 2: integration connected?', { integrationId, connected: integrationNow?.connected });
         if (integrationNow?.connected) {
-          console.log('❌ EXITING: Integration is now connected');
           setPendingTrigger(null);
           isProcessingRef.current = false;
           return;
         }
       }
 
-      console.log('✅ SENDING MESSAGES');
-      // Send the messages
+      // Send messages
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [triggerType, integrationId] = currentTrigger.details.split(':');
-        
         if (triggerType === 'integration') {
           const integration = findIntegration(integrationId);
           const integrationName = integration?.name || integrationId;
-          
-          addChatMessage({
-            role: 'assistant',
-            content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
-          });
-          
-          await new Promise(r => setTimeout(r, 2000));
-          
-          addChatMessage({
-            role: 'assistant',
-            content: "Sometimes OAuth connections can be finicky. Want to try connecting again?",
-            buttons: [
-              { label: "I'll try again", action: 'decline_help' },
-              { label: "It still doesn't work", action: 'escalate' },
-            ],
-          });
 
-          updateUserSession({
-            activeThread: {
-              type: 'error',
-              integration: integrationId,
-              resolved: false,
-              awaitingResponse: true,
-              skipNextReply: false,
-            },
-          });
+          if (integrationId === 'salesforce') {
+            // NEW SALESFORCE MESSAGES
+            addChatMessage({
+              role: 'assistant',
+              content: "Hey, Alex, I’m Lee from Flowtide. I noticed you ran into an error when trying to connect to Salesforce.",
+            });
+
+            await new Promise(r => setTimeout(r, 2000));
+
+            addChatMessage({
+              role: 'assistant',
+              content: "We’re aware of the issue and are working on a fix. We apologize for that. We’ll reach out once it’s fixed.",
+            });
+
+            updateUserSession({
+              activeThread: {
+                type: 'error',
+                integration: integrationId,
+                resolved: false,
+                awaitingResponse: true,
+                skipNextReply: false,
+              },
+            });
+          } else {
+            // Original messaging for HubSpot / GA
+            addChatMessage({
+              role: 'assistant',
+              content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
+            });
+
+            await new Promise(r => setTimeout(r, 2000));
+
+            addChatMessage({
+              role: 'assistant',
+              content: "Sometimes OAuth connections can be finicky. Want to try connecting again?",
+              buttons: [
+                { label: "I'll try again", action: 'decline_help' },
+                { label: "It still doesn't work", action: 'escalate' },
+              ],
+            });
+
+            updateUserSession({
+              activeThread: {
+                type: 'error',
+                integration: integrationId,
+                resolved: false,
+                awaitingResponse: true,
+                skipNextReply: false,
+              },
+            });
+          }
         }
       } else if (pendingTrigger.type === 'stuck') {
         const stepId = pendingTrigger.details;
-        
+
         addChatMessage({
           role: 'assistant',
           content: "Hey Alex! I noticed you've been on this step for a bit. Need a hand?",
