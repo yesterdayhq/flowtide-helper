@@ -23,92 +23,24 @@ export function ChatWidget() {
   } = useApp();
 
   const [inputValue, setInputValue] = useState('');
-  const [pendingTrigger, setPendingTrigger] = useState<NodeJS.Timeout | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // --------------------------
-  // Scroll to bottom on new messages or typing
-  // --------------------------
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, isTyping]);
 
-  // --------------------------
-  // Autofocus input when chat opens
-  // --------------------------
   useEffect(() => {
     if (isChatOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
-      markIntegrationResolvedIfConnected(); // check when chat opens
     }
   }, [isChatOpen]);
 
   // --------------------------
-  // Auto-resolve integration error threads
-  // --------------------------
-  useEffect(() => {
-    const activeThread = userSession.activeThread;
-    if (!activeThread || (activeThread.type !== 'error' && activeThread.type !== 'stuck')) return;
-
-    const hubspot = integrations.find((i) => i.id === 'hubspot');
-    const ga = integrations.find((i) => i.id === 'google-analytics');
-
-    if ((hubspot?.connected || ga?.connected) && activeThread) {
-      updateUserSession({
-        activeThread: { ...activeThread, resolved: true, skipNextReply: true, awaitingResponse: false },
-      });
-      // Clear any pending delayed messages
-      if (pendingTrigger) {
-        clearTimeout(pendingTrigger);
-        setPendingTrigger(null);
-      }
-    }
-  }, [integrations, userSession.activeThread, updateUserSession, pendingTrigger]);
-
-  // --------------------------
-  // Safety: stop replying if skipNextReply is true
-  // --------------------------
-  useEffect(() => {
-    const activeThread = userSession.activeThread;
-    if (activeThread?.skipNextReply) {
-      updateUserSession({
-        activeThread: { ...activeThread, skipNextReply: false, resolved: true, awaitingResponse: false },
-      });
-    }
-  }, [userSession.activeThread, updateUserSession]);
-
-  // --------------------------
-  // Helper: mark integration resolved if already connected
-  // --------------------------
-  const markIntegrationResolvedIfConnected = () => {
-    const activeThread = userSession.activeThread;
-    if (!activeThread) return;
-
-    const hubspot = integrations.find((i) => i.id === 'hubspot');
-    const ga = integrations.find((i) => i.id === 'google-analytics');
-    const salesforce = integrations.find((i) => i.id === 'salesforce');
-
-    const anyConnected = hubspot?.connected || ga?.connected || salesforce?.connected;
-
-    if ((activeThread.type === 'error' || activeThread.type === 'stuck') && anyConnected) {
-      updateUserSession({
-        activeThread: { ...activeThread, resolved: true, skipNextReply: true, awaitingResponse: false },
-      });
-      if (pendingTrigger) {
-        clearTimeout(pendingTrigger);
-        setPendingTrigger(null);
-      }
-    }
-  };
-
-  // --------------------------
-  // Handle user message
+  // Handle user message - UPDATED WITH HUBSPOT FLOW
   // --------------------------
   const handleSend = async () => {
     if (!inputValue.trim()) return;
-
-    markIntegrationResolvedIfConnected();
 
     const userMessage = inputValue.trim();
     setInputValue('');
@@ -124,10 +56,52 @@ export function ChatWidget() {
     const lowerMessage = userMessage.toLowerCase();
     const activeThread = userSession.activeThread;
 
-    // --------------------------
     // Exit early if already resolved
-    // --------------------------
     if (activeThread?.resolved && !activeThread.awaitingResponse) return;
+
+    // --------------------------
+    // HUBSPOT FLOW - Multi-stage conversation
+    // --------------------------
+    if (activeThread?.type === 'error' && activeThread.integration === 'hubspot') {
+      // STAGE 1: Awaiting error code
+      if (activeThread.hubspotFlowStage === 'awaiting_error_code') {
+        // Check if message contains an error code (3-digit number)
+        const errorCodeMatch = userMessage.match(/\b\d{3}\b/);
+        
+        if (errorCodeMatch) {
+          const errorCode = errorCodeMatch[0];
+          addChatMessage({
+            role: 'assistant',
+            content: `Ah, we're working on a fix for error ${errorCode}. Can you click "Try Again"? Sometimes that fixes it.`,
+            buttons: [
+              { label: "It didn't work", action: 'hubspot_still_broken' },
+            ],
+          });
+
+          updateUserSession({
+            activeThread: {
+              ...activeThread,
+              hubspotFlowStage: 'awaiting_try_again_result',
+            },
+          });
+        } else {
+          // No error code detected, ask again
+          addChatMessage({
+            role: 'assistant',
+            content: "I didn't catch the error code. Could you share the 3-digit code you're seeing?",
+          });
+        }
+        return;
+      }
+
+      // STAGE 2: After "It didn't work" button clicked (handled in handleButtonClick)
+      // Just general fallback if they type instead of clicking
+      addChatMessage({
+        role: 'assistant',
+        content: "Did the \"Try Again\" button help resolve the issue?",
+      });
+      return;
+    }
 
     // --------------------------
     // Salesforce-specific message
@@ -153,9 +127,9 @@ export function ChatWidget() {
     }
 
     // --------------------------
-    // Thread-specific logic (error)
+    // Thread-specific logic (error) - for non-HubSpot
     // --------------------------
-    if (activeThread?.type === 'error' && activeThread.awaitingResponse) {
+    if (activeThread?.type === 'error' && activeThread.awaitingResponse && activeThread.integration !== 'hubspot') {
       if (lowerMessage.includes('work') || lowerMessage.includes('success') || lowerMessage.includes('fixed')) {
         addChatMessage({ role: 'assistant', content: 'Great! Let me know if you need anything else.' });
       } else if (lowerMessage.includes('fail') || lowerMessage.includes('again') || lowerMessage.includes('still')) {
@@ -227,7 +201,7 @@ export function ChatWidget() {
   };
 
   // --------------------------
-  // Handle assistant action buttons
+  // Handle assistant action buttons - UPDATED WITH HUBSPOT FLOW
   // --------------------------
   const handleButtonClick = async (action: string) => {
     const delay = () => new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
@@ -237,6 +211,61 @@ export function ChatWidget() {
     await delay();
     setIsTyping(false);
 
+    // HUBSPOT FLOW - "It didn't work" button
+    if (action === 'hubspot_still_broken') {
+      addChatMessage({
+        role: 'assistant',
+        content: "Sorry to hear that, we've notified our team. If you want, I can loop in a specialist to get you sorted out faster. Want me to pull them in?",
+        buttons: [
+          { label: "Yes", action: 'hubspot_escalate_yes' },
+          { label: "No", action: 'hubspot_escalate_no' },
+        ],
+      });
+
+      if (activeThread) {
+        updateUserSession({
+          activeThread: {
+            ...activeThread,
+            hubspotFlowStage: 'awaiting_escalation_choice',
+          },
+        });
+      }
+      return;
+    }
+
+    if (action === 'hubspot_escalate_yes') {
+      addChatMessage({
+        role: 'assistant',
+        content: "Here's the Calendar link for the specialist: https://cal.com/andrew-simpson-gvo4qi/30min",
+      });
+
+      if (activeThread) {
+        updateUserSession({
+          activeThread: {
+            ...activeThread,
+            resolved: true,
+            awaitingResponse: false,
+          },
+        });
+      }
+      return;
+    }
+
+    if (action === 'hubspot_escalate_no') {
+      // Do nothing for now, just mark as resolved
+      if (activeThread) {
+        updateUserSession({
+          activeThread: {
+            ...activeThread,
+            resolved: true,
+            awaitingResponse: false,
+          },
+        });
+      }
+      return;
+    }
+
+    // Original button actions
     if (action === 'show_tip') {
       addChatMessage({
         role: 'assistant',
@@ -256,7 +285,7 @@ export function ChatWidget() {
       });
     }
 
-    if (activeThread) {
+    if (activeThread && action !== 'hubspot_still_broken') {
       updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
     }
   };
@@ -286,9 +315,6 @@ export function ChatWidget() {
     );
   };
 
-  // --------------------------
-  // Render chat UI
-  // --------------------------
   return (
     <>
       <AnimatePresence>
