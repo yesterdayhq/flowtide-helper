@@ -89,16 +89,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const integrationAttemptRef = useRef<Record<string, number>>({});
   const cancelTriggerRef = useRef(false);
 
-  // --------------------------
-  // UPDATE USER SESSION
-  // --------------------------
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
 
-  // --------------------------
-  // DEMO FUNCTIONS
-  // --------------------------
   const addStep = useCallback((imageUrl: string | null, annotation: string) => {
     setDemo((prev) => {
       if (!prev) return prev;
@@ -123,13 +117,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
   }, []);
 
-  // --------------------------
-  // HELPERS
-  // --------------------------
   const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
 
   // --------------------------
-  // INTEGRATIONS
+  // INTEGRATIONS - UPDATED
   // --------------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
     if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 0;
@@ -137,11 +128,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const attempt = integrationAttemptRef.current[integrationId];
 
     const currentIntegration = integrations.find(i => i.id === integrationId);
-
-    // If already connected, skip Lee outreach
     if (currentIntegration?.connected) return;
 
-    // ✅ CANCEL TRIGGER: User is attempting to fix it themselves
+    // Cancel any pending trigger when user attempts to reconnect
     setPendingTrigger((prev) => {
       const prevDetails = prev?.details?.toLowerCase();
       const checkFor = `integration:${integrationId}`.toLowerCase();
@@ -156,6 +145,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
 
+    // HubSpot ALWAYS fails with error code 500
+    if (integrationId === 'hubspot') {
+      setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
+      setIntegrationError({ id: integrationId, message: 'OAuth connection failed: Error 500 - Internal Server Error' });
+      setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
+      return;
+    }
+
     // Salesforce always fails
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
@@ -164,16 +161,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // HubSpot and Google Analytics: fail on first attempt, succeed on second
+    // Google Analytics: fail on first attempt, succeed on second
     if (attempt === 1) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
         id: integrationId,
-        message: `OAuth connection failed for ${integrationId === 'hubspot' ? 'HubSpot' : 'Google Analytics'}.`,
+        message: 'OAuth connection failed for Google Analytics.',
       });
       setPendingTrigger({ type: 'error', details: `integration:${integrationId}` });
     } else {
-      // ✅ SUCCESS on second attempt
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
     }
@@ -181,9 +177,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
-  // --------------------------
-  // CHAT FUNCTIONS
-  // --------------------------
   const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
     setChatMessages(prev => [...prev, newMessage]);
@@ -194,9 +187,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
-  // --------------------------
-  // TRIGGERS
-  // --------------------------
   const triggerError = useCallback((type: 'integration' | 'upload', details: string) => {
     if (isProcessingRef.current) return;
     setPendingTrigger({ type: 'error', details: `${type}:${details}` });
@@ -231,7 +221,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --------------------------
-  // HANDLE PENDING TRIGGERS
+  // HANDLE PENDING TRIGGERS - UPDATED WITH NEW HUBSPOT FLOW
   // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
@@ -240,7 +230,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       const currentTrigger = { ...pendingTrigger };
 
-      await new Promise(r => setTimeout(r, 10000));
+      // Wait 20 seconds for HubSpot errors, 10 seconds for others
+      const isHubSpot = currentTrigger.details?.includes('hubspot');
+      const delay = isHubSpot ? 20000 : 10000;
+      await new Promise(r => setTimeout(r, delay));
 
       if (cancelTriggerRef.current || !pendingTrigger) {
         isProcessingRef.current = false;
@@ -267,18 +260,42 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const integration = findIntegration(integrationId);
           const integrationName = integration?.name || integrationId;
 
-          if (integrationId === 'salesforce') {
-            // NEW SALESFORCE MESSAGES
+          if (integrationId === 'hubspot') {
+            // NEW HUBSPOT FLOW
             addChatMessage({
               role: 'assistant',
-              content: "Hey, Alex, I’m Lee from Flowtide. I noticed you ran into an error when trying to connect to Salesforce.",
+              content: "Hey, Alex, looks like your HubSpot integration didn't work.",
             });
 
             await new Promise(r => setTimeout(r, 2000));
 
             addChatMessage({
               role: 'assistant',
-              content: "We’re aware of the issue and are working on a fix. We apologize for that. We’ll reach out once it’s fixed.",
+              content: "What was the error code?",
+            });
+
+            updateUserSession({
+              activeThread: {
+                type: 'error',
+                integration: integrationId,
+                resolved: false,
+                awaitingResponse: true,
+                skipNextReply: false,
+                hubspotFlowStage: 'awaiting_error_code',
+              },
+            });
+          } else if (integrationId === 'salesforce') {
+            // SALESFORCE MESSAGES
+            addChatMessage({
+              role: 'assistant',
+              content: "Hey, Alex, I'm Lee from Flowtide. I noticed you ran into an error when trying to connect to Salesforce.",
+            });
+
+            await new Promise(r => setTimeout(r, 2000));
+
+            addChatMessage({
+              role: 'assistant',
+              content: "We're aware of the issue and are working on a fix. We apologize for that. We'll reach out once it's fixed.",
             });
 
             updateUserSession({
@@ -291,7 +308,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               },
             });
           } else {
-            // Original messaging for HubSpot / GA
+            // Google Analytics flow (original)
             addChatMessage({
               role: 'assistant',
               content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
