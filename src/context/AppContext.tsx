@@ -131,7 +131,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (currentIntegration?.connected) return;
 
     // Only cancel trigger for non-HubSpot integrations when user attempts to reconnect
-    // For HubSpot, let the first trigger go through (it needs to fail for Lee to reach out)
+    // For HubSpot, let the first trigger go through, but cancel if Lee has already reached out
     if (integrationId !== 'hubspot') {
       setPendingTrigger((prev) => {
         const prevDetails = prev?.details?.toLowerCase();
@@ -143,6 +143,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
         return prev;
       });
+    } else {
+      // For HubSpot: if Lee has already started the conversation, don't trigger again
+      const activeThread = userSession.activeThread;
+      if (activeThread?.type === 'error' && activeThread.integration === 'hubspot' && activeThread.hubspotFlowStage) {
+        // Lee has already reached out, don't restart the flow
+        setPendingTrigger((prev) => {
+          if (!prev) return prev;
+          if (prev.type === 'error' && prev.details?.toLowerCase().includes('hubspot')) {
+            cancelTriggerRef.current = true;
+            return null;
+          }
+          return prev;
+        });
+      }
     }
 
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
