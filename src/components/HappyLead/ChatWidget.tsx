@@ -234,9 +234,21 @@ export function ChatWidget() {
     }
 
     if (action === 'hubspot_escalate_yes') {
+      // First message: Checking Slack
       addChatMessage({
         role: 'assistant',
-        content: "Here's the Calendar link for the specialist: https://cal.com/andrew-simpson-gvo4qi/30min",
+        content: "Great, let me check Slack to see if anyone is available right now.",
+      });
+
+      // Show typing indicator and wait 10 seconds
+      setIsTyping(true);
+      await new Promise(r => setTimeout(r, 10000));
+      setIsTyping(false);
+
+      // Second message: No one available + calendar link
+      addChatMessage({
+        role: 'assistant',
+        content: "It seems like no one is available at the moment. However, here's the Calendar link for the specialist: https://cal.com/andrew-simpson-gvo4qi/30min",
       });
 
       if (activeThread) {
