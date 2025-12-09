@@ -130,17 +130,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentIntegration = integrations.find(i => i.id === integrationId);
     if (currentIntegration?.connected) return;
 
-    // Cancel any pending trigger when user attempts to reconnect
-    setPendingTrigger((prev) => {
-      const prevDetails = prev?.details?.toLowerCase();
-      const checkFor = `integration:${integrationId}`.toLowerCase();
-      if (!prev) return prev;
-      if (prev.type === 'error' && prevDetails === checkFor) {
-        cancelTriggerRef.current = true;
-        return null;
-      }
-      return prev;
-    });
+    // Only cancel trigger for non-HubSpot integrations when user attempts to reconnect
+    // For HubSpot, let the first trigger go through (it needs to fail for Lee to reach out)
+    if (integrationId !== 'hubspot') {
+      setPendingTrigger((prev) => {
+        const prevDetails = prev?.details?.toLowerCase();
+        const checkFor = `integration:${integrationId}`.toLowerCase();
+        if (!prev) return prev;
+        if (prev.type === 'error' && prevDetails === checkFor) {
+          cancelTriggerRef.current = true;
+          return null;
+        }
+        return prev;
+      });
+    }
 
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
