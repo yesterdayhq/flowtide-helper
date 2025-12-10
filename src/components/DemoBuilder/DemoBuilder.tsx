@@ -68,6 +68,14 @@ export function DemoBuilder() {
     triggerHappyMoment();
   };
 
+  const handlePreviewClick = () => {
+    // Track preview open for stuck detection
+    if ((window as any).__trackPreviewOpen) {
+      (window as any).__trackPreviewOpen();
+    }
+    setIsPreviewOpen(true);
+  };
+
   if (!demo) return null;
 
   return (
@@ -99,7 +107,7 @@ export function DemoBuilder() {
           <div className="flex gap-3">
             <Button
               variant="outline"
-              onClick={() => setIsPreviewOpen(true)}
+              onClick={handlePreviewClick}
               disabled={demo.steps.length === 0}
               className="gap-2"
             >
@@ -181,10 +189,10 @@ export function DemoBuilder() {
             <h3 className="mb-2 font-display text-xl font-semibold">
               Create your first demo
             </h3>
-           <p className="mb-6 text-muted-foreground">
-  Add steps to build an interactive product walkthrough. Upload
-  screenshots, add annotations, and more, to guide your viewers.
-</p>
+            <p className="mb-6 text-muted-foreground">
+              Add steps to build an interactive product walkthrough. Upload
+              screenshots, add annotations, and more, to guide your viewers.
+            </p>
             <Button onClick={handleAddStep} className="gap-2">
               <Plus className="h-4 w-4" />
               Add your first step
