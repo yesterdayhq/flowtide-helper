@@ -4,25 +4,23 @@ import { useApp } from '@/context/AppContext';
 export function StuckDetection() {
   const { demo, triggerStuck } = useApp();
 
+  // GLOBAL: Track if ANY stuck flow has been triggered
+  const hasTriggeredAnyStuckFlowRef = useRef(false);
+
   // Scenario 1: Inactivity tracking
   const scenario1TimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstUploadTimeRef = useRef<number | null>(null);
-  const hasTriggeredScenario1Ref = useRef(false);
 
   // Scenario 2: Behavior tracking
   const annotationEditsRef = useRef<Record<string, { count: number; timestamps: number[] }>>({});
   const previewCountRef = useRef<{ count: number; timestamps: number[] }>({ count: 0, timestamps: [] });
   const imageDeletesRef = useRef<{ count: number; timestamps: number[] }>({ count: 0, timestamps: [] });
-  
-  // NEW: Track which behavior types have been triggered in this session
-  const triggeredBehaviorsRef = useRef<Set<'annotation' | 'preview' | 'delete'>>(new Set());
   const scenario2TimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Track previous step count to detect deletions
   const previousStepCountRef = useRef(demo?.steps.length || 0);
-  const previousAnnotationsRef = useRef<Record<string, string>>({});
 
-  console.log('🔍 StuckDetection mounted - triggered behaviors:', Array.from(triggeredBehaviorsRef.current));
+  console.log('🔍 StuckDetection mounted - hasTriggeredAnyStuckFlow:', hasTriggeredAnyStuckFlowRef.current);
 
   // Helper: Check if activity meets Scenario 1 exemption criteria
   const meetsExemptionCriteria = () => {
@@ -39,33 +37,49 @@ export function StuckDetection() {
     return timestamps.filter(ts => now - ts < windowMs);
   };
 
-  // Helper: Check if any behavior has already been triggered
-  const hasAnyBehaviorTriggered = () => {
-    return triggeredBehaviorsRef.current.size > 0;
+  // Helper: Cancel ALL stuck detection timers
+  const cancelAllStuckTimers = () => {
+    console.log('🛑 Canceling all stuck detection timers');
+    
+    if (scenario1TimerRef.current) {
+      clearTimeout(scenario1TimerRef.current);
+      scenario1TimerRef.current = null;
+    }
+    
+    if (scenario2TimeoutRef.current) {
+      clearTimeout(scenario2TimeoutRef.current);
+      scenario2TimeoutRef.current = null;
+    }
   };
 
-  // Helper: Trigger stuck message for Scenario 2
-  const triggerScenario2Message = (behaviorType: 'annotation' | 'preview' | 'delete') => {
-    console.log('🚨 triggerScenario2Message called for:', behaviorType);
+  // Helper: Trigger stuck message (used by both scenarios)
+  const triggerStuckMessage = (scenario: 'scenario1' | 'scenario2', behaviorType?: 'annotation' | 'preview' | 'delete') => {
+    console.log('🚨 triggerStuckMessage called for:', scenario, behaviorType || '');
     
-    // Check if this specific behavior OR any behavior has already triggered
-    if (triggeredBehaviorsRef.current.has(behaviorType) || hasAnyBehaviorTriggered()) {
-      console.log('❌ Already triggered (this or another behavior), skipping');
+    // Check if any stuck flow has already triggered
+    if (hasTriggeredAnyStuckFlowRef.current) {
+      console.log('❌ A stuck flow already triggered, skipping');
       return;
     }
     
-    triggeredBehaviorsRef.current.add(behaviorType);
-    console.log('✅ Setting triggered for:', behaviorType, '- all triggered:', Array.from(triggeredBehaviorsRef.current));
+    // Mark that a stuck flow has been triggered
+    hasTriggeredAnyStuckFlowRef.current = true;
+    console.log('✅ Setting hasTriggeredAnyStuckFlow to true');
     
-    const stepId = demo?.steps[0]?.id || 'general-stuck-scenario2';
+    // Cancel all other pending timers
+    cancelAllStuckTimers();
+    
+    const stepId = demo?.steps[0]?.id || `general-stuck-${scenario}`;
     console.log('📞 Calling triggerStuck with stepId:', stepId);
     triggerStuck(stepId);
   };
 
   // Reset Scenario 1 timer (resets to 60 seconds on activity)
   const resetScenario1Timer = () => {
-    // Don't reset if already triggered or if exemption criteria met
-    if (hasTriggeredScenario1Ref.current || meetsExemptionCriteria()) {
+    console.log('⏲️ resetScenario1Timer called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
+    
+    // Don't reset if any stuck flow triggered, or if exemption criteria met
+    if (hasTriggeredAnyStuckFlowRef.current || meetsExemptionCriteria()) {
       if (scenario1TimerRef.current) {
         clearTimeout(scenario1TimerRef.current);
         scenario1TimerRef.current = null;
@@ -80,17 +94,16 @@ export function StuckDetection() {
 
     // Set new 60-second timer
     scenario1TimerRef.current = setTimeout(() => {
-      if (!hasTriggeredScenario1Ref.current && !meetsExemptionCriteria()) {
-        hasTriggeredScenario1Ref.current = true;
-        const stepId = demo?.steps[0]?.id || 'general-stuck-scenario1';
-        triggerStuck(stepId);
+      console.log('⏰ Scenario 1 timer elapsed');
+      if (!hasTriggeredAnyStuckFlowRef.current && !meetsExemptionCriteria()) {
+        triggerStuckMessage('scenario1');
       }
     }, 60000);
   };
 
   // Track first upload and activity for Scenario 1
   useEffect(() => {
-    if (!demo || hasTriggeredScenario1Ref.current) return;
+    if (!demo || hasTriggeredAnyStuckFlowRef.current) return;
 
     const imageCount = demo.steps.length;
 
@@ -114,11 +127,11 @@ export function StuckDetection() {
 
   // Scenario 2: Track preview opens
   const trackPreviewOpen = () => {
-    console.log('👁️ trackPreviewOpen called - any behavior triggered:', hasAnyBehaviorTriggered());
+    console.log('👁️ trackPreviewOpen called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
     
-    // Stop tracking if any behavior has already triggered
-    if (hasAnyBehaviorTriggered()) {
-      console.log('❌ A behavior already triggered, ignoring preview tracking');
+    // Stop tracking if any stuck flow has already triggered
+    if (hasTriggeredAnyStuckFlowRef.current) {
+      console.log('❌ A stuck flow already triggered, ignoring preview tracking');
       return;
     }
 
@@ -133,24 +146,24 @@ export function StuckDetection() {
       console.log('🎯 Preview threshold reached (3+), scheduling trigger in 10s');
       
       if (scenario2TimeoutRef.current) {
-        console.log('🧹 Clearing existing timeout');
+        console.log('🧹 Clearing existing scenario 2 timeout');
         clearTimeout(scenario2TimeoutRef.current);
       }
       
       scenario2TimeoutRef.current = setTimeout(() => {
-        console.log('⏰ 10 seconds elapsed - executing trigger callback');
-        triggerScenario2Message('preview');
+        console.log('⏰ 10 seconds elapsed - executing preview trigger callback');
+        triggerStuckMessage('scenario2', 'preview');
       }, 10000);
       
-      console.log('✅ Timeout scheduled');
+      console.log('✅ Scenario 2 timeout scheduled for preview');
     }
   };
 
   // Scenario 2: Track image deletions/replacements
   useEffect(() => {
-    console.log('🗑️ Delete tracking effect - any behavior triggered:', hasAnyBehaviorTriggered());
+    console.log('🗑️ Delete tracking effect - hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
     
-    if (!demo || hasAnyBehaviorTriggered()) return;
+    if (!demo || hasTriggeredAnyStuckFlowRef.current) return;
 
     const currentStepCount = demo.steps.length;
     console.log('🗑️ Step count - previous:', previousStepCountRef.current, 'current:', currentStepCount);
@@ -165,10 +178,14 @@ export function StuckDetection() {
 
       if (imageDeletesRef.current.count >= 3) {
         console.log('🎯 Delete threshold reached, scheduling trigger in 10s');
-        if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
+        
+        if (scenario2TimeoutRef.current) {
+          clearTimeout(scenario2TimeoutRef.current);
+        }
+        
         scenario2TimeoutRef.current = setTimeout(() => {
           console.log('⏰ 10 seconds elapsed from deletes - triggering');
-          triggerScenario2Message('delete');
+          triggerStuckMessage('scenario2', 'delete');
         }, 10000);
       }
     }
@@ -178,11 +195,11 @@ export function StuckDetection() {
 
   // Track annotation interactions (opening, canceling, saving - ANY interaction)
   const trackAnnotationInteraction = (stepId: string) => {
-    console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'any triggered:', hasAnyBehaviorTriggered());
+    console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
     
-    // Stop tracking if any behavior has already triggered
-    if (hasAnyBehaviorTriggered()) {
-      console.log('❌ A behavior already triggered, ignoring annotation tracking');
+    // Stop tracking if any stuck flow has already triggered
+    if (hasTriggeredAnyStuckFlowRef.current) {
+      console.log('❌ A stuck flow already triggered, ignoring annotation tracking');
       return;
     }
 
@@ -202,10 +219,14 @@ export function StuckDetection() {
 
     if (annotationEditsRef.current[stepId].count >= 3) {
       console.log('🎯 Annotation interaction threshold reached (3+), scheduling trigger in 10s');
-      if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
+      
+      if (scenario2TimeoutRef.current) {
+        clearTimeout(scenario2TimeoutRef.current);
+      }
+      
       scenario2TimeoutRef.current = setTimeout(() => {
         console.log('⏰ 10 seconds elapsed from annotation interactions - triggering');
-        triggerScenario2Message('annotation');
+        triggerStuckMessage('scenario2', 'annotation');
       }, 10000);
     }
   };
