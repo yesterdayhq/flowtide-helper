@@ -25,7 +25,8 @@ export function StuckDetection() {
     if (!demo) return false;
     const imageCount = demo.steps.length;
     const annotationCount = demo.steps.filter(step => step.annotation && step.annotation.trim().length > 0).length;
-    return imageCount >= 3 || annotationCount >= 2;
+    // Must have 3+ images AND each image must have an annotation
+    return imageCount >= 3 && imageCount === annotationCount;
   };
 
   // Helper: Clean up old timestamps (outside 1-minute window)
@@ -102,9 +103,13 @@ export function StuckDetection() {
     previewCountRef.current.timestamps = cleanupOldTimestamps(previewCountRef.current.timestamps);
     previewCountRef.current.count = previewCountRef.current.timestamps.length;
 
+    console.log('Preview tracked:', previewCountRef.current.count, 'times in last 60s');
+
     if (previewCountRef.current.count >= 3) {
+      console.log('Preview threshold reached, scheduling trigger in 10s');
       if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
       scenario2TimeoutRef.current = setTimeout(() => {
+        console.log('Triggering stuck message from preview');
         triggerScenario2Message();
       }, 10000);
     }
@@ -122,9 +127,13 @@ export function StuckDetection() {
       imageDeletesRef.current.timestamps = cleanupOldTimestamps(imageDeletesRef.current.timestamps);
       imageDeletesRef.current.count = imageDeletesRef.current.timestamps.length;
 
+      console.log('Image delete tracked:', imageDeletesRef.current.count, 'times in last 60s');
+
       if (imageDeletesRef.current.count >= 3) {
+        console.log('Delete threshold reached, scheduling trigger in 10s');
         if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
         scenario2TimeoutRef.current = setTimeout(() => {
+          console.log('Triggering stuck message from deletes');
           triggerScenario2Message();
         }, 10000);
       }
@@ -164,9 +173,13 @@ export function StuckDetection() {
         );
         annotationEditsRef.current[stepId].count = annotationEditsRef.current[stepId].timestamps.length;
 
+        console.log(`Annotation edit tracked for step ${stepId}:`, annotationEditsRef.current[stepId].count, 'times in last 60s');
+
         if (annotationEditsRef.current[stepId].count >= 3) {
+          console.log('Annotation edit threshold reached, scheduling trigger in 10s');
           if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
           scenario2TimeoutRef.current = setTimeout(() => {
+            console.log('Triggering stuck message from annotation edits');
             triggerScenario2Message();
           }, 10000);
         }
