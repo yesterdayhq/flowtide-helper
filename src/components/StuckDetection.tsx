@@ -20,6 +20,8 @@ export function StuckDetection() {
   const previousStepCountRef = useRef(demo?.steps.length || 0);
   const previousAnnotationsRef = useRef<Record<string, string>>({});
 
+  console.log('🔍 StuckDetection mounted - scenario2Triggered:', scenario2TriggeredRef.current);
+
   // Helper: Check if activity meets Scenario 1 exemption criteria
   const meetsExemptionCriteria = () => {
     if (!demo) return false;
@@ -37,10 +39,16 @@ export function StuckDetection() {
 
   // Helper: Trigger stuck message for Scenario 2
   const triggerScenario2Message = () => {
-    if (scenario2TriggeredRef.current) return;
+    console.log('🚨 triggerScenario2Message called - current state:', scenario2TriggeredRef.current);
+    if (scenario2TriggeredRef.current) {
+      console.log('❌ Already triggered, skipping');
+      return;
+    }
     scenario2TriggeredRef.current = true;
+    console.log('✅ Setting scenario2Triggered to true and calling triggerStuck');
     
     const stepId = demo?.steps[0]?.id || 'general-stuck-scenario2';
+    console.log('📞 Calling triggerStuck with stepId:', stepId);
     triggerStuck(stepId);
   };
 
@@ -96,30 +104,45 @@ export function StuckDetection() {
 
   // Scenario 2: Track preview opens
   const trackPreviewOpen = () => {
-    if (scenario2TriggeredRef.current) return;
+    console.log('👁️ trackPreviewOpen called - scenario2Triggered:', scenario2TriggeredRef.current);
+    if (scenario2TriggeredRef.current) {
+      console.log('❌ Already triggered, returning early');
+      return;
+    }
 
     const now = Date.now();
     previewCountRef.current.timestamps.push(now);
     previewCountRef.current.timestamps = cleanupOldTimestamps(previewCountRef.current.timestamps);
     previewCountRef.current.count = previewCountRef.current.timestamps.length;
 
-    console.log('Preview tracked:', previewCountRef.current.count, 'times in last 60s');
+    console.log('👁️ Preview tracked:', previewCountRef.current.count, 'times in last 60s', 
+                'Timestamps:', previewCountRef.current.timestamps);
 
     if (previewCountRef.current.count >= 3) {
-      console.log('Preview threshold reached, scheduling trigger in 10s');
-      if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
+      console.log('🎯 Preview threshold reached (3+), scheduling trigger in 10s');
+      console.log('⏰ Current timeout ref:', scenario2TimeoutRef.current);
+      
+      if (scenario2TimeoutRef.current) {
+        console.log('🧹 Clearing existing timeout');
+        clearTimeout(scenario2TimeoutRef.current);
+      }
+      
       scenario2TimeoutRef.current = setTimeout(() => {
-        console.log('Triggering stuck message from preview');
+        console.log('⏰ 10 seconds elapsed - executing trigger callback');
         triggerScenario2Message();
       }, 10000);
+      
+      console.log('✅ Timeout scheduled, ref:', scenario2TimeoutRef.current);
     }
   };
 
   // Scenario 2: Track image deletions/replacements
   useEffect(() => {
+    console.log('🗑️ Delete tracking effect - demo:', !!demo, 'triggered:', scenario2TriggeredRef.current);
     if (!demo || scenario2TriggeredRef.current) return;
 
     const currentStepCount = demo.steps.length;
+    console.log('🗑️ Step count - previous:', previousStepCountRef.current, 'current:', currentStepCount);
     
     if (currentStepCount < previousStepCountRef.current) {
       const now = Date.now();
@@ -127,13 +150,13 @@ export function StuckDetection() {
       imageDeletesRef.current.timestamps = cleanupOldTimestamps(imageDeletesRef.current.timestamps);
       imageDeletesRef.current.count = imageDeletesRef.current.timestamps.length;
 
-      console.log('Image delete tracked:', imageDeletesRef.current.count, 'times in last 60s');
+      console.log('🗑️ Image delete tracked:', imageDeletesRef.current.count, 'times in last 60s');
 
       if (imageDeletesRef.current.count >= 3) {
-        console.log('Delete threshold reached, scheduling trigger in 10s');
+        console.log('🎯 Delete threshold reached, scheduling trigger in 10s');
         if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
         scenario2TimeoutRef.current = setTimeout(() => {
-          console.log('Triggering stuck message from deletes');
+          console.log('⏰ 10 seconds elapsed from deletes - triggering');
           triggerScenario2Message();
         }, 10000);
       }
@@ -144,20 +167,25 @@ export function StuckDetection() {
 
   // Expose preview tracking function globally
   useEffect(() => {
+    console.log('🌐 Setting up window.__trackPreviewOpen');
     (window as any).__trackPreviewOpen = trackPreviewOpen;
     return () => {
+      console.log('🌐 Cleaning up window.__trackPreviewOpen');
       delete (window as any).__trackPreviewOpen;
     };
   }, []);
 
   // Track annotation edits
   useEffect(() => {
+    console.log('✏️ Annotation tracking effect - demo:', !!demo, 'triggered:', scenario2TriggeredRef.current);
     if (!demo || scenario2TriggeredRef.current) return;
 
     demo.steps.forEach(step => {
       const stepId = step.id;
       const currentAnnotation = step.annotation || '';
       const previousAnnotation = previousAnnotationsRef.current[stepId] || '';
+
+      console.log(`✏️ Step ${stepId} - previous: "${previousAnnotation}", current: "${currentAnnotation}"`);
 
       // Only count as an edit if both previous and current are non-empty AND different
       if (currentAnnotation !== previousAnnotation && previousAnnotation.length > 0 && currentAnnotation.length > 0) {
@@ -173,13 +201,13 @@ export function StuckDetection() {
         );
         annotationEditsRef.current[stepId].count = annotationEditsRef.current[stepId].timestamps.length;
 
-        console.log(`Annotation edit tracked for step ${stepId}:`, annotationEditsRef.current[stepId].count, 'times in last 60s');
+        console.log(`✏️ Annotation edit tracked for step ${stepId}:`, annotationEditsRef.current[stepId].count, 'times in last 60s');
 
         if (annotationEditsRef.current[stepId].count >= 3) {
-          console.log('Annotation edit threshold reached, scheduling trigger in 10s');
+          console.log('🎯 Annotation edit threshold reached, scheduling trigger in 10s');
           if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
           scenario2TimeoutRef.current = setTimeout(() => {
-            console.log('Triggering stuck message from annotation edits');
+            console.log('⏰ 10 seconds elapsed from annotation edits - triggering');
             triggerScenario2Message();
           }, 10000);
         }
