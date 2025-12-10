@@ -7,7 +7,7 @@ export function StuckDetection() {
   // Scenario 1: Inactivity tracking
   const scenario1TimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstUploadTimeRef = useRef<number | null>(null);
-  const hasTriggeredRef = useRef(false);
+  const hasTriggeredScenario1Ref = useRef(false);
 
   // Scenario 2: Behavior tracking
   const annotationEditsRef = useRef<Record<string, { count: number; timestamps: number[] }>>({});
@@ -34,19 +34,19 @@ export function StuckDetection() {
     return timestamps.filter(ts => now - ts < windowMs);
   };
 
-  // Helper: Trigger stuck message
-  const triggerStuckMessage = () => {
-    if (hasTriggeredRef.current || scenario2TriggeredRef.current) return;
-    hasTriggeredRef.current = true;
+  // Helper: Trigger stuck message for Scenario 2
+  const triggerScenario2Message = () => {
+    if (scenario2TriggeredRef.current) return;
     scenario2TriggeredRef.current = true;
     
-    const stepId = demo?.steps[0]?.id || 'general-stuck';
+    const stepId = demo?.steps[0]?.id || 'general-stuck-scenario2';
     triggerStuck(stepId);
   };
 
-  // Reset Scenario 1 timer (30 seconds of inactivity)
+  // Reset Scenario 1 timer (resets to 60 seconds on activity)
   const resetScenario1Timer = () => {
-    if (hasTriggeredRef.current || meetsExemptionCriteria()) {
+    // Don't reset if already triggered or if exemption criteria met
+    if (hasTriggeredScenario1Ref.current || meetsExemptionCriteria()) {
       if (scenario1TimerRef.current) {
         clearTimeout(scenario1TimerRef.current);
         scenario1TimerRef.current = null;
@@ -54,33 +54,34 @@ export function StuckDetection() {
       return;
     }
 
+    // Clear existing timer
     if (scenario1TimerRef.current) {
       clearTimeout(scenario1TimerRef.current);
     }
 
+    // Set new 60-second timer
     scenario1TimerRef.current = setTimeout(() => {
-      if (!hasTriggeredRef.current && !meetsExemptionCriteria()) {
-        triggerStuckMessage();
+      if (!hasTriggeredScenario1Ref.current && !meetsExemptionCriteria()) {
+        hasTriggeredScenario1Ref.current = true;
+        const stepId = demo?.steps[0]?.id || 'general-stuck-scenario1';
+        triggerStuck(stepId);
       }
-    }, 30000);
+    }, 60000);
   };
 
-  // Track first upload for Scenario 1 initial timer
+  // Track first upload and activity for Scenario 1
   useEffect(() => {
-    if (!demo || hasTriggeredRef.current) return;
+    if (!demo || hasTriggeredScenario1Ref.current) return;
 
     const imageCount = demo.steps.length;
 
+    // When first image is uploaded, start the initial timer
     if (imageCount === 1 && firstUploadTimeRef.current === null) {
       firstUploadTimeRef.current = Date.now();
-      
-      scenario1TimerRef.current = setTimeout(() => {
-        if (!hasTriggeredRef.current && !meetsExemptionCriteria()) {
-          triggerStuckMessage();
-        }
-      }, 60000);
+      resetScenario1Timer();
     }
 
+    // On any subsequent activity (more images or annotations), reset the timer
     if (imageCount > 0 && firstUploadTimeRef.current !== null) {
       resetScenario1Timer();
     }
@@ -104,7 +105,7 @@ export function StuckDetection() {
     if (previewCountRef.current.count >= 3) {
       if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
       scenario2TimeoutRef.current = setTimeout(() => {
-        triggerStuckMessage();
+        triggerScenario2Message();
       }, 10000);
     }
   };
@@ -124,7 +125,7 @@ export function StuckDetection() {
       if (imageDeletesRef.current.count >= 3) {
         if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
         scenario2TimeoutRef.current = setTimeout(() => {
-          triggerStuckMessage();
+          triggerScenario2Message();
         }, 10000);
       }
     }
@@ -149,6 +150,7 @@ export function StuckDetection() {
       const currentAnnotation = step.annotation || '';
       const previousAnnotation = previousAnnotationsRef.current[stepId] || '';
 
+      // Only count as an edit if both previous and current are non-empty AND different
       if (currentAnnotation !== previousAnnotation && previousAnnotation.length > 0 && currentAnnotation.length > 0) {
         const now = Date.now();
         
@@ -165,7 +167,7 @@ export function StuckDetection() {
         if (annotationEditsRef.current[stepId].count >= 3) {
           if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
           scenario2TimeoutRef.current = setTimeout(() => {
-            triggerStuckMessage();
+            triggerScenario2Message();
           }, 10000);
         }
       }
