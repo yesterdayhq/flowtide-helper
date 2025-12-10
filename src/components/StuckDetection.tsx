@@ -200,7 +200,6 @@ export function StuckDetection() {
 
   // Track annotation interactions (opening, canceling, saving - ANY interaction)
   // NOTE: This does NOT check exemption criteria - spam behavior should still be caught
-  // We track by counting individual interactions - threshold is 6 to account for open+close pairs
   const trackAnnotationInteraction = (stepId: string) => {
     console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
     
@@ -224,8 +223,8 @@ export function StuckDetection() {
 
     console.log(`✏️ Annotation interaction tracked for step ${stepId}:`, annotationEditsRef.current[stepId].count, 'times in last 60s');
 
-    if (annotationEditsRef.current[stepId].count >= 6) {
-      console.log('🎯 Annotation interaction threshold reached (6+), scheduling trigger in 10s');
+    if (annotationEditsRef.current[stepId].count >= 3) {
+      console.log('🎯 Annotation interaction threshold reached (3+), scheduling trigger in 10s');
       
       if (scenario2TimeoutRef.current) {
         clearTimeout(scenario2TimeoutRef.current);
