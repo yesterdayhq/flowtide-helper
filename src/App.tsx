@@ -9,6 +9,8 @@ import { ChatWidget } from '@/components/HappyLead/ChatWidget';
 import Index from './pages/Index';
 import Integrations from './pages/Integrations';
 import NotFound from './pages/NotFound';
+import { StuckDetection } from '@/components/StuckDetection';
+
 
 const queryClient = new QueryClient();
 
@@ -16,6 +18,7 @@ const App = () => (
   <HelmetProvider>
     <QueryClientProvider client={queryClient}>
       <AppProvider>
+        <StuckDetection />
         <TooltipProvider>
           <Toaster />
           <Sonner />
