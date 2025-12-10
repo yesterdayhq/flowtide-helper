@@ -120,6 +120,12 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
     setIsEditing(false);
   };
 
+  const handleRemove = () => {
+    // Note: The actual deletion tracking happens automatically in StuckDetection.tsx
+    // via the useEffect that watches demo?.steps.length
+    onRemove();
+  };
+
   return (
     <motion.div
       ref={setNodeRef}
@@ -144,7 +150,7 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
       <motion.button
         onClick={(e) => {
           e.stopPropagation();
-          onRemove();
+          handleRemove();
         }}
         className="absolute right-3 top-3 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-background/90 text-muted-foreground opacity-0 shadow-sm transition-all hover:bg-destructive hover:text-destructive-foreground group-hover:opacity-100"
         whileHover={{ scale: 1.1 }}
