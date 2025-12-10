@@ -190,7 +190,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connected', connected: true } : i));
       setIntegrationError((prev) => (prev && prev.id === integrationId ? null : prev));
     }
-  }, [integrations]);
+  }, [integrations, userSession.activeThread]);
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
@@ -238,7 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --------------------------
-  // HANDLE PENDING TRIGGERS - UPDATED WITH NEW HUBSPOT FLOW
+  // HANDLE PENDING TRIGGERS - UPDATED WITH NEW HUBSPOT FLOW AND STUCK FLOW
   // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
@@ -356,12 +356,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else if (pendingTrigger.type === 'stuck') {
         const stepId = pendingTrigger.details;
 
+        // First message
         addChatMessage({
           role: 'assistant',
-          content: "Hey Alex! I noticed you've been on this step for a bit. Need a hand?",
+          content: "Hey, Alex, looks like you might be stuck. I want to help you feel confident to publish your demo!",
+        });
+
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Second message
+        addChatMessage({
+          role: 'assistant',
+          content: "Want help picking what to do next to finish your demo?",
           buttons: [
-            { label: "Yes, show me a tip", action: 'show_tip' },
-            { label: "No, I'm good", action: 'decline_help' },
+            { label: "Yes", action: 'stuck_help_yes' },
+            { label: "No", action: 'stuck_help_no' },
           ],
         });
 
