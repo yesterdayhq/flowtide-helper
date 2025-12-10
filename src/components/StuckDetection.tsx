@@ -165,57 +165,52 @@ export function StuckDetection() {
     previousStepCountRef.current = currentStepCount;
   }, [demo?.steps.length]);
 
-  // Expose preview tracking function globally
+  // Track annotation interactions (opening, canceling, saving - ANY interaction)
+  const trackAnnotationInteraction = (stepId: string) => {
+    console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'triggered:', scenario2TriggeredRef.current);
+    if (scenario2TriggeredRef.current) {
+      console.log('❌ Already triggered, returning early');
+      return;
+    }
+
+    const now = Date.now();
+    
+    if (!annotationEditsRef.current[stepId]) {
+      annotationEditsRef.current[stepId] = { count: 0, timestamps: [] };
+    }
+
+    annotationEditsRef.current[stepId].timestamps.push(now);
+    annotationEditsRef.current[stepId].timestamps = cleanupOldTimestamps(
+      annotationEditsRef.current[stepId].timestamps
+    );
+    annotationEditsRef.current[stepId].count = annotationEditsRef.current[stepId].timestamps.length;
+
+    console.log(`✏️ Annotation interaction tracked for step ${stepId}:`, annotationEditsRef.current[stepId].count, 'times in last 60s');
+
+    if (annotationEditsRef.current[stepId].count >= 3) {
+      console.log('🎯 Annotation interaction threshold reached (3+), scheduling trigger in 10s');
+      if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
+      scenario2TimeoutRef.current = setTimeout(() => {
+        console.log('⏰ 10 seconds elapsed from annotation interactions - triggering');
+        triggerScenario2Message();
+      }, 10000);
+    }
+  };
+
+  // Expose tracking functions globally
   useEffect(() => {
-    console.log('🌐 Setting up window.__trackPreviewOpen');
+    console.log('🌐 Setting up window.__trackPreviewOpen and window.__trackAnnotationInteraction');
     (window as any).__trackPreviewOpen = trackPreviewOpen;
+    (window as any).__trackAnnotationInteraction = trackAnnotationInteraction;
     return () => {
-      console.log('🌐 Cleaning up window.__trackPreviewOpen');
+      console.log('🌐 Cleaning up tracking functions');
       delete (window as any).__trackPreviewOpen;
+      delete (window as any).__trackAnnotationInteraction;
     };
   }, []);
 
-  // Track annotation edits
-  useEffect(() => {
-    console.log('✏️ Annotation tracking effect - demo:', !!demo, 'triggered:', scenario2TriggeredRef.current);
-    if (!demo || scenario2TriggeredRef.current) return;
-
-    demo.steps.forEach(step => {
-      const stepId = step.id;
-      const currentAnnotation = step.annotation || '';
-      const previousAnnotation = previousAnnotationsRef.current[stepId] || '';
-
-      console.log(`✏️ Step ${stepId} - previous: "${previousAnnotation}", current: "${currentAnnotation}"`);
-
-      // Only count as an edit if both previous and current are non-empty AND different
-      if (currentAnnotation !== previousAnnotation && previousAnnotation.length > 0 && currentAnnotation.length > 0) {
-        const now = Date.now();
-        
-        if (!annotationEditsRef.current[stepId]) {
-          annotationEditsRef.current[stepId] = { count: 0, timestamps: [] };
-        }
-
-        annotationEditsRef.current[stepId].timestamps.push(now);
-        annotationEditsRef.current[stepId].timestamps = cleanupOldTimestamps(
-          annotationEditsRef.current[stepId].timestamps
-        );
-        annotationEditsRef.current[stepId].count = annotationEditsRef.current[stepId].timestamps.length;
-
-        console.log(`✏️ Annotation edit tracked for step ${stepId}:`, annotationEditsRef.current[stepId].count, 'times in last 60s');
-
-        if (annotationEditsRef.current[stepId].count >= 3) {
-          console.log('🎯 Annotation edit threshold reached, scheduling trigger in 10s');
-          if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
-          scenario2TimeoutRef.current = setTimeout(() => {
-            console.log('⏰ 10 seconds elapsed from annotation edits - triggering');
-            triggerScenario2Message();
-          }, 10000);
-        }
-      }
-
-      previousAnnotationsRef.current[stepId] = currentAnnotation;
-    });
-  }, [demo?.steps]);
+  // NOTE: Annotation tracking is now handled manually in StepCard.tsx
+  // via window.__trackAnnotationInteraction(stepId) calls when user opens/cancels/saves
 
   // Cleanup on unmount
   useEffect(() => {
