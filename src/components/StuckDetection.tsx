@@ -13,14 +13,16 @@ export function StuckDetection() {
   const annotationEditsRef = useRef<Record<string, { count: number; timestamps: number[] }>>({});
   const previewCountRef = useRef<{ count: number; timestamps: number[] }>({ count: 0, timestamps: [] });
   const imageDeletesRef = useRef<{ count: number; timestamps: number[] }>({ count: 0, timestamps: [] });
-  const scenario2TriggeredRef = useRef(false);
+  
+  // NEW: Track which behavior types have been triggered in this session
+  const triggeredBehaviorsRef = useRef<Set<'annotation' | 'preview' | 'delete'>>(new Set());
   const scenario2TimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Track previous step count to detect deletions
   const previousStepCountRef = useRef(demo?.steps.length || 0);
   const previousAnnotationsRef = useRef<Record<string, string>>({});
 
-  console.log('🔍 StuckDetection mounted - scenario2Triggered:', scenario2TriggeredRef.current);
+  console.log('🔍 StuckDetection mounted - triggered behaviors:', Array.from(triggeredBehaviorsRef.current));
 
   // Helper: Check if activity meets Scenario 1 exemption criteria
   const meetsExemptionCriteria = () => {
@@ -37,15 +39,23 @@ export function StuckDetection() {
     return timestamps.filter(ts => now - ts < windowMs);
   };
 
+  // Helper: Check if any behavior has already been triggered
+  const hasAnyBehaviorTriggered = () => {
+    return triggeredBehaviorsRef.current.size > 0;
+  };
+
   // Helper: Trigger stuck message for Scenario 2
-  const triggerScenario2Message = () => {
-    console.log('🚨 triggerScenario2Message called - current state:', scenario2TriggeredRef.current);
-    if (scenario2TriggeredRef.current) {
-      console.log('❌ Already triggered, skipping');
+  const triggerScenario2Message = (behaviorType: 'annotation' | 'preview' | 'delete') => {
+    console.log('🚨 triggerScenario2Message called for:', behaviorType);
+    
+    // Check if this specific behavior OR any behavior has already triggered
+    if (triggeredBehaviorsRef.current.has(behaviorType) || hasAnyBehaviorTriggered()) {
+      console.log('❌ Already triggered (this or another behavior), skipping');
       return;
     }
-    scenario2TriggeredRef.current = true;
-    console.log('✅ Setting scenario2Triggered to true and calling triggerStuck');
+    
+    triggeredBehaviorsRef.current.add(behaviorType);
+    console.log('✅ Setting triggered for:', behaviorType, '- all triggered:', Array.from(triggeredBehaviorsRef.current));
     
     const stepId = demo?.steps[0]?.id || 'general-stuck-scenario2';
     console.log('📞 Calling triggerStuck with stepId:', stepId);
@@ -104,9 +114,11 @@ export function StuckDetection() {
 
   // Scenario 2: Track preview opens
   const trackPreviewOpen = () => {
-    console.log('👁️ trackPreviewOpen called - scenario2Triggered:', scenario2TriggeredRef.current);
-    if (scenario2TriggeredRef.current) {
-      console.log('❌ Already triggered, returning early');
+    console.log('👁️ trackPreviewOpen called - any behavior triggered:', hasAnyBehaviorTriggered());
+    
+    // Stop tracking if any behavior has already triggered
+    if (hasAnyBehaviorTriggered()) {
+      console.log('❌ A behavior already triggered, ignoring preview tracking');
       return;
     }
 
@@ -115,12 +127,10 @@ export function StuckDetection() {
     previewCountRef.current.timestamps = cleanupOldTimestamps(previewCountRef.current.timestamps);
     previewCountRef.current.count = previewCountRef.current.timestamps.length;
 
-    console.log('👁️ Preview tracked:', previewCountRef.current.count, 'times in last 60s', 
-                'Timestamps:', previewCountRef.current.timestamps);
+    console.log('👁️ Preview tracked:', previewCountRef.current.count, 'times in last 60s');
 
     if (previewCountRef.current.count >= 3) {
       console.log('🎯 Preview threshold reached (3+), scheduling trigger in 10s');
-      console.log('⏰ Current timeout ref:', scenario2TimeoutRef.current);
       
       if (scenario2TimeoutRef.current) {
         console.log('🧹 Clearing existing timeout');
@@ -129,17 +139,18 @@ export function StuckDetection() {
       
       scenario2TimeoutRef.current = setTimeout(() => {
         console.log('⏰ 10 seconds elapsed - executing trigger callback');
-        triggerScenario2Message();
+        triggerScenario2Message('preview');
       }, 10000);
       
-      console.log('✅ Timeout scheduled, ref:', scenario2TimeoutRef.current);
+      console.log('✅ Timeout scheduled');
     }
   };
 
   // Scenario 2: Track image deletions/replacements
   useEffect(() => {
-    console.log('🗑️ Delete tracking effect - demo:', !!demo, 'triggered:', scenario2TriggeredRef.current);
-    if (!demo || scenario2TriggeredRef.current) return;
+    console.log('🗑️ Delete tracking effect - any behavior triggered:', hasAnyBehaviorTriggered());
+    
+    if (!demo || hasAnyBehaviorTriggered()) return;
 
     const currentStepCount = demo.steps.length;
     console.log('🗑️ Step count - previous:', previousStepCountRef.current, 'current:', currentStepCount);
@@ -157,7 +168,7 @@ export function StuckDetection() {
         if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
         scenario2TimeoutRef.current = setTimeout(() => {
           console.log('⏰ 10 seconds elapsed from deletes - triggering');
-          triggerScenario2Message();
+          triggerScenario2Message('delete');
         }, 10000);
       }
     }
@@ -167,9 +178,11 @@ export function StuckDetection() {
 
   // Track annotation interactions (opening, canceling, saving - ANY interaction)
   const trackAnnotationInteraction = (stepId: string) => {
-    console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'triggered:', scenario2TriggeredRef.current);
-    if (scenario2TriggeredRef.current) {
-      console.log('❌ Already triggered, returning early');
+    console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'any triggered:', hasAnyBehaviorTriggered());
+    
+    // Stop tracking if any behavior has already triggered
+    if (hasAnyBehaviorTriggered()) {
+      console.log('❌ A behavior already triggered, ignoring annotation tracking');
       return;
     }
 
@@ -192,7 +205,7 @@ export function StuckDetection() {
       if (scenario2TimeoutRef.current) clearTimeout(scenario2TimeoutRef.current);
       scenario2TimeoutRef.current = setTimeout(() => {
         console.log('⏰ 10 seconds elapsed from annotation interactions - triggering');
-        triggerScenario2Message();
+        triggerScenario2Message('annotation');
       }, 10000);
     }
   };
@@ -208,9 +221,6 @@ export function StuckDetection() {
       delete (window as any).__trackAnnotationInteraction;
     };
   }, []);
-
-  // NOTE: Annotation tracking is now handled manually in StepCard.tsx
-  // via window.__trackAnnotationInteraction(stepId) calls when user opens/cancels/saves
 
   // Cleanup on unmount
   useEffect(() => {
