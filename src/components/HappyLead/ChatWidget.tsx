@@ -277,6 +277,14 @@ export function ChatWidget() {
       return;
     }
 
+    // Stuck detection button actions
+    if (action === 'stuck_help_yes' || action === 'stuck_help_no') {
+      if ((window as any).__handleStuckButton) {
+        (window as any).__handleStuckButton(action);
+      }
+      return;
+    }
+
     // Original button actions
     if (action === 'show_tip') {
       addChatMessage({
@@ -299,6 +307,18 @@ export function ChatWidget() {
 
     if (activeThread && action !== 'hubspot_still_broken') {
       updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    handleSend();
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
     }
   };
 
@@ -470,29 +490,24 @@ export function ChatWidget() {
             </div>
 
             <div className="border-t bg-background p-4">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSend();
-                }}
-                className="flex gap-2"
-              >
+              <div className="flex gap-2">
                 <Input
                   ref={inputRef}
                   value={inputValue}
                   onChange={(e) => setInputValue(e.target.value)}
+                  onKeyDown={handleKeyDown}
                   placeholder="Type a message..."
                   className="flex-1"
                 />
                 <Button
-                  type="submit"
+                  onClick={handleSend}
                   size="icon"
                   disabled={!inputValue.trim()}
                   className="shrink-0"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
-              </form>
+              </div>
             </div>
           </motion.div>
         )}
