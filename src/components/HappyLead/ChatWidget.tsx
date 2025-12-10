@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils';
 
 export function ChatWidget() {
   const {
+    demo,
     integrations,
     chatMessages,
     addChatMessage,
@@ -148,9 +149,42 @@ export function ChatWidget() {
     // --------------------------
     if (activeThread?.type === 'stuck' && activeThread.awaitingResponse) {
       if (lowerMessage.includes('yes') || lowerMessage.includes('help') || lowerMessage.includes('tip') || lowerMessage.includes('sure')) {
+        // Perform dynamic audit
+        const imageCount = demo?.steps.length || 0;
+        const annotationCount = demo?.steps.filter(step => step.annotation && step.annotation.trim().length > 0).length || 0;
+        
         addChatMessage({
           role: 'assistant',
-          content: 'Try dragging the screenshot into the step area and click Save — that usually fixes it.',
+          content: "Here's what I recommend to get your demo ready to publish. I checked your progress so far:",
+        });
+
+        await delay();
+
+        // Build the dynamic recommendations
+        let recommendations = "We find that most people who have successful demos tend to:\n\n";
+        
+        // 1. Image count recommendation
+        if (imageCount >= 4) {
+          recommendations += `1. Add at least 4 images - you currently have ${imageCount}. Well done!\n`;
+        } else {
+          const difference = 4 - imageCount;
+          recommendations += `1. Add at least 4 images - you currently have ${imageCount}. You should add ${difference} more.\n`;
+        }
+        
+        // 2. Annotation recommendation
+        if (imageCount === annotationCount && imageCount > 0) {
+          recommendations += "2. Have an annotation on each step. You've got that handled!\n";
+        } else {
+          const difference = imageCount - annotationCount;
+          recommendations += `2. Have an annotation on each step. You should add ${difference} more.\n`;
+        }
+        
+        // 3. Preview and publish
+        recommendations += "3. Preview and Publish! Don't wait for perfection, ship it and get feedback!";
+
+        addChatMessage({
+          role: 'assistant',
+          content: recommendations,
         });
       } else if (lowerMessage.includes('no') || lowerMessage.includes('good') || lowerMessage.includes('fine')) {
         addChatMessage({ role: 'assistant', content: "No problem — I'll be here if you need anything." });
@@ -201,7 +235,7 @@ export function ChatWidget() {
   };
 
   // --------------------------
-  // Handle assistant action buttons - UPDATED WITH HUBSPOT FLOW
+  // Handle assistant action buttons - UPDATED WITH HUBSPOT FLOW AND STUCK FLOW
   // --------------------------
   const handleButtonClick = async (action: string) => {
     const delay = () => new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
@@ -210,6 +244,79 @@ export function ChatWidget() {
     setIsTyping(true);
     await delay();
     setIsTyping(false);
+
+    // STUCK FLOW - "Yes" button with dynamic audit
+    if (action === 'stuck_help_yes') {
+      const imageCount = demo?.steps.length || 0;
+      const annotationCount = demo?.steps.filter(step => step.annotation && step.annotation.trim().length > 0).length || 0;
+      
+      // First message
+      addChatMessage({
+        role: 'assistant',
+        content: "Here's what I recommend to get your demo ready to publish. I checked your progress so far:",
+      });
+
+      setIsTyping(true);
+      await new Promise(r => setTimeout(r, 1500));
+      setIsTyping(false);
+
+      // Build the dynamic recommendations
+      let recommendations = "We find that most people who have successful demos tend to:\n\n";
+      
+      // 1. Image count recommendation
+      if (imageCount >= 4) {
+        recommendations += `1. Add at least 4 images - you currently have ${imageCount}. Well done!\n`;
+      } else {
+        const difference = 4 - imageCount;
+        recommendations += `1. Add at least 4 images - you currently have ${imageCount}. You should add ${difference} more.\n`;
+      }
+      
+      // 2. Annotation recommendation
+      if (imageCount === annotationCount && imageCount > 0) {
+        recommendations += "2. Have an annotation on each step. You've got that handled!\n";
+      } else {
+        const difference = imageCount - annotationCount;
+        recommendations += `2. Have an annotation on each step. You should add ${difference} more.\n`;
+      }
+      
+      // 3. Preview and publish
+      recommendations += "3. Preview and Publish! Don't wait for perfection, ship it and get feedback!";
+
+      // Second message with recommendations
+      addChatMessage({
+        role: 'assistant',
+        content: recommendations,
+      });
+
+      if (activeThread) {
+        updateUserSession({ 
+          activeThread: { 
+            ...activeThread, 
+            resolved: true, 
+            awaitingResponse: false 
+          } 
+        });
+      }
+      return;
+    }
+
+    if (action === 'stuck_help_no') {
+      addChatMessage({ 
+        role: 'assistant', 
+        content: "No problem — I'll be here if you need anything." 
+      });
+      
+      if (activeThread) {
+        updateUserSession({ 
+          activeThread: { 
+            ...activeThread, 
+            resolved: true, 
+            awaitingResponse: false 
+          } 
+        });
+      }
+      return;
+    }
 
     // HUBSPOT FLOW - "It didn't work" button
     if (action === 'hubspot_still_broken') {
@@ -273,14 +380,6 @@ export function ChatWidget() {
             awaitingResponse: false,
           },
         });
-      }
-      return;
-    }
-
-    // Stuck detection button actions
-    if (action === 'stuck_help_yes' || action === 'stuck_help_no') {
-      if ((window as any).__handleStuckButton) {
-        (window as any).__handleStuckButton(action);
       }
       return;
     }
