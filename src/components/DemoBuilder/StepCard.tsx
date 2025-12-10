@@ -115,9 +115,33 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
     }
   };
 
+  // Track annotation interactions globally for Scenario 2
+  const trackAnnotationInteraction = () => {
+    // Use the global tracking function exposed by StuckDetection
+    if ((window as any).__trackAnnotationInteraction) {
+      (window as any).__trackAnnotationInteraction(step.id);
+    }
+  };
+
+  const handleAnnotationClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsEditing(true);
+    // Track that they opened the annotation
+    trackAnnotationInteraction();
+  };
+
+  const handleAnnotationCancel = () => {
+    setAnnotation(step.annotation);
+    setIsEditing(false);
+    // Track that they canceled (still an interaction)
+    trackAnnotationInteraction();
+  };
+
   const saveAnnotation = () => {
     onUpdate({ annotation });
     setIsEditing(false);
+    // Track that they saved (interaction)
+    trackAnnotationInteraction();
   };
 
   const handleRemove = () => {
@@ -263,10 +287,7 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => {
-                  setAnnotation(step.annotation);
-                  setIsEditing(false);
-                }}
+                onClick={handleAnnotationCancel}
               >
                 Cancel
               </Button>
@@ -278,10 +299,7 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
           </div>
         ) : (
           <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsEditing(true);
-            }}
+            onClick={handleAnnotationClick}
             className="group/edit flex w-full items-start gap-2 text-left"
           >
             {step.annotation ? (
