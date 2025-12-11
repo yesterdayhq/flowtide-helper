@@ -6,6 +6,9 @@ export function StuckDetection() {
 
   // GLOBAL: Track if ANY stuck flow has been triggered
   const hasTriggeredAnyStuckFlowRef = useRef(false);
+  
+  // Track if demo was published this session - if so, never trigger stuck detection
+  const hasPublishedThisSessionRef = useRef(false);
 
   // Scenario 1: Inactivity tracking
   const scenario1TimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -20,7 +23,7 @@ export function StuckDetection() {
   // Track previous step count to detect deletions
   const previousStepCountRef = useRef(demo?.steps.length || 0);
 
-  console.log('🔍 StuckDetection mounted - hasTriggeredAnyStuckFlow:', hasTriggeredAnyStuckFlowRef.current);
+  console.log('🔍 StuckDetection mounted - hasTriggeredAnyStuckFlow:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedThisSessionRef.current);
 
   // Helper: Check if activity meets Scenario 1 exemption criteria
   // This ONLY exempts Scenario 1 (inactivity), NOT Scenario 2 (spam behaviors)
@@ -53,9 +56,26 @@ export function StuckDetection() {
     }
   };
 
+  // Track if demo gets published this session - CRITICAL FOR DISABLING STUCK DETECTION
+  useEffect(() => {
+    if (demo?.isPublished && !hasPublishedThisSessionRef.current) {
+      console.log('📢 Demo published this session - DISABLING stuck detection permanently');
+      hasPublishedThisSessionRef.current = true;
+      
+      // Cancel all timers immediately
+      cancelAllStuckTimers();
+    }
+  }, [demo?.isPublished]);
+
   // Helper: Trigger stuck message (used by both scenarios)
   const triggerStuckMessage = (scenario: 'scenario1' | 'scenario2', behaviorType?: 'annotation' | 'preview' | 'delete') => {
     console.log('🚨 triggerStuckMessage called for:', scenario, behaviorType || '');
+    
+    // Don't trigger if demo was published this session
+    if (hasPublishedThisSessionRef.current) {
+      console.log('❌ Demo published this session, skipping stuck detection');
+      return;
+    }
     
     // Check if any stuck flow has already triggered
     if (hasTriggeredAnyStuckFlowRef.current) {
@@ -77,11 +97,10 @@ export function StuckDetection() {
 
   // Reset Scenario 1 timer (resets to 60 seconds on activity)
   const resetScenario1Timer = () => {
-    console.log('⏲️ resetScenario1Timer called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'meetsExemption:', meetsExemptionCriteria());
+    console.log('⏲️ resetScenario1Timer called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedThisSessionRef.current, 'meetsExemption:', meetsExemptionCriteria());
     
-    // Don't reset if any stuck flow triggered, or if exemption criteria met
-    // Note: exemption criteria ONLY applies to Scenario 1, not Scenario 2
-    if (hasTriggeredAnyStuckFlowRef.current || meetsExemptionCriteria()) {
+    // Don't reset if demo was published, any stuck flow triggered, or if exemption criteria met
+    if (hasPublishedThisSessionRef.current || hasTriggeredAnyStuckFlowRef.current || meetsExemptionCriteria()) {
       if (scenario1TimerRef.current) {
         clearTimeout(scenario1TimerRef.current);
         scenario1TimerRef.current = null;
@@ -97,7 +116,7 @@ export function StuckDetection() {
     // Set new 60-second timer
     scenario1TimerRef.current = setTimeout(() => {
       console.log('⏰ Scenario 1 timer elapsed');
-      if (!hasTriggeredAnyStuckFlowRef.current && !meetsExemptionCriteria()) {
+      if (!hasPublishedThisSessionRef.current && !hasTriggeredAnyStuckFlowRef.current && !meetsExemptionCriteria()) {
         triggerStuckMessage('scenario1');
       }
     }, 60000);
@@ -105,7 +124,7 @@ export function StuckDetection() {
 
   // Track first upload and activity for Scenario 1
   useEffect(() => {
-    if (!demo || hasTriggeredAnyStuckFlowRef.current) return;
+    if (!demo || hasTriggeredAnyStuckFlowRef.current || hasPublishedThisSessionRef.current) return;
 
     const imageCount = demo.steps.length;
 
@@ -128,13 +147,12 @@ export function StuckDetection() {
   }, [demo?.steps.length, demo?.steps]);
 
   // Scenario 2: Track preview opens
-  // NOTE: This does NOT check exemption criteria - spam behavior should still be caught
   const trackPreviewOpen = () => {
-    console.log('👁️ trackPreviewOpen called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
+    console.log('👁️ trackPreviewOpen called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedThisSessionRef.current);
     
-    // Only stop if a stuck flow has already been triggered
-    if (hasTriggeredAnyStuckFlowRef.current) {
-      console.log('❌ A stuck flow already triggered, ignoring preview tracking');
+    // Stop if a stuck flow has already been triggered OR if demo was published
+    if (hasTriggeredAnyStuckFlowRef.current || hasPublishedThisSessionRef.current) {
+      console.log('❌ Stuck flow triggered or demo published, ignoring preview tracking');
       return;
     }
 
@@ -163,12 +181,11 @@ export function StuckDetection() {
   };
 
   // Scenario 2: Track image deletions/replacements
-  // NOTE: This does NOT check exemption criteria - spam behavior should still be caught
   useEffect(() => {
-    console.log('🗑️ Delete tracking effect - hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
+    console.log('🗑️ Delete tracking effect - hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedThisSessionRef.current);
     
-    // Only stop if a stuck flow has already been triggered
-    if (!demo || hasTriggeredAnyStuckFlowRef.current) return;
+    // Stop if a stuck flow has already been triggered OR if demo was published
+    if (!demo || hasTriggeredAnyStuckFlowRef.current || hasPublishedThisSessionRef.current) return;
 
     const currentStepCount = demo.steps.length;
     console.log('🗑️ Step count - previous:', previousStepCountRef.current, 'current:', currentStepCount);
@@ -199,13 +216,12 @@ export function StuckDetection() {
   }, [demo?.steps.length]);
 
   // Track annotation interactions (opening, canceling, saving - ANY interaction)
-  // NOTE: This does NOT check exemption criteria - spam behavior should still be caught
   const trackAnnotationInteraction = (stepId: string) => {
-    console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'hasTriggered:', hasTriggeredAnyStuckFlowRef.current);
+    console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedThisSessionRef.current);
     
-    // Only stop if a stuck flow has already been triggered
-    if (hasTriggeredAnyStuckFlowRef.current) {
-      console.log('❌ A stuck flow already triggered, ignoring annotation tracking');
+    // Stop if a stuck flow has already been triggered OR if demo was published
+    if (hasTriggeredAnyStuckFlowRef.current || hasPublishedThisSessionRef.current) {
+      console.log('❌ Stuck flow triggered or demo published, ignoring annotation tracking');
       return;
     }
 
