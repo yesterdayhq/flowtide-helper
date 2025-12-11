@@ -8,7 +8,7 @@ import { useApp } from '@/context/AppContext';
 
 interface IntegrationCardProps {
   integration: Integration;
-  onConnect: () => Promise<boolean> | boolean;
+  onConnect: () => void | Promise<void>;
 }
 
 const iconMap: Record<string, React.ReactNode> = {
@@ -59,21 +59,21 @@ export function IntegrationCard({ integration, onConnect }: IntegrationCardProps
   // Main connect handler (handles both success + error)
   // -------------------------------------------------------------------
   const handleConnect = async () => {
-    const result = await onConnect();
+    await onConnect();
 
     const active = userSession.activeThread;
 
-    // -----------------------------
-    // CASE 1 — CONNECT FAILED
-    // -----------------------------
-    if (!result) {
+    // If integration is in error state after connect, create error thread
+    if (integration.status === 'error') {
       updateUserSession({
         activeThread: {
+          id: `error-${Date.now()}`,
           type: 'error',
-          integration: integration.icon, // "hubspot" | "salesforce"
+          integration: integration.icon,
           resolved: false,
           awaitingResponse: true,
-          skipNextReply: false
+          skipNextReply: false,
+          followUpSent: false
         }
       });
       return;

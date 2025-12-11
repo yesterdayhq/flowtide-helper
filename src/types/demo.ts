@@ -44,6 +44,9 @@ export interface ActiveThread {
   id: string;
   type: ThreadType;
   integrationName?: string;
+  integration?: string;
+  hubspotFlowStage?: string;
+  skipNextReply?: boolean;
   stepId?: string;
   awaitingResponse: boolean;
   resolved: boolean;
