@@ -22,11 +22,15 @@ export function ShareDialog({ isOpen, onClose, demoId, demoTitle }: ShareDialogP
   const [copied, setCopied] = useState(false);
   
   const shareUrl = `https://demo.flowtide.app/${demoId}`;
-
+  
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
+      
+      // Cancel the share flow timer when user copies the link
+      (window as any).__onShareCopy?.();
+      
       toast({
         title: 'Link copied!',
         description: 'Share link has been copied to your clipboard.',
