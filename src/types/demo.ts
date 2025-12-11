@@ -30,7 +30,8 @@ export interface ChatMessage {
   content: string;
   timestamp: Date;
   buttons?: ChatButton[];
-  threadId?: string; // Track which thread this belongs to
+  threadId?: string;
+  viewed?: boolean; // NEW: Track if user has seen this message
 }
 
 export interface ChatButton {
@@ -72,7 +73,7 @@ export interface UserSession {
   lastInstruction: string | null;
   activeThread: ActiveThread | null;
   integrationAttempts: Record<string, IntegrationAttempt>;
-  stuckPromptedSteps: string[]; // Steps where stuck prompt was already shown
+  stuckPromptedSteps: string[];
   stuckDetection: {
     stepId: string | null;
     dwellStart: Date | null;
