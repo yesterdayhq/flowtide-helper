@@ -7,6 +7,9 @@ export function StuckDetection() {
   // GLOBAL: Track if ANY stuck flow has been triggered
   const hasTriggeredAnyStuckFlowRef = useRef(false);
 
+  // Track if demo has been published this session
+  const hasPublishedRef = useRef(userSession.hasPublishedThisSession);
+
   // Scenario 1: Inactivity tracking
   const scenario1TimerRef = useRef<NodeJS.Timeout | null>(null);
   const firstUploadTimeRef = useRef<number | null>(null);
