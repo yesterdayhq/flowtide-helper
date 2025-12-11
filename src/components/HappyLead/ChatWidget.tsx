@@ -198,22 +198,14 @@ export function ChatWidget() {
     }
 
     // --------------------------
-    // Thread-specific logic (happy)
+    // Thread-specific logic (share flow)
     // --------------------------
-    if (activeThread?.type === 'happy' && activeThread.awaitingResponse) {
-      if (lowerMessage.includes('call') || lowerMessage.includes('schedule') || lowerMessage.includes('yes')) {
-        addChatMessage({
-          role: 'assistant',
-          content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
-        });
-      } else if (lowerMessage.includes('tip') || lowerMessage.includes('best')) {
-        addChatMessage({
-          role: 'assistant',
-          content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
-        });
-      } else {
-        addChatMessage({ role: 'assistant', content: 'Would you like to schedule a call or get some tips?' });
-      }
+    if (activeThread?.type === 'share' && activeThread.awaitingResponse) {
+      // User typed something during share flow - give generic response
+      addChatMessage({ 
+        role: 'assistant', 
+        content: "Would you like to speak with an expert to learn powerful use cases and best practices?" 
+      });
       if (activeThread) {
         updateUserSession({ activeThread: { ...activeThread, resolved: true, awaitingResponse: false } });
       }
@@ -235,7 +227,7 @@ export function ChatWidget() {
   };
 
   // --------------------------
-  // Handle assistant action buttons - UPDATED WITH HUBSPOT FLOW AND STUCK FLOW
+  // Handle assistant action buttons - UPDATED WITH ALL FLOWS
   // --------------------------
   const handleButtonClick = async (action: string) => {
     const delay = () => new Promise((r) => setTimeout(r, 1500 + Math.random() * 1500));
@@ -384,7 +376,55 @@ export function ChatWidget() {
       return;
     }
 
-    // Original button actions
+    // SHARE FLOW HANDLERS
+    if (action === 'share_flow_yes') {
+      // First message
+      addChatMessage({
+        role: 'assistant',
+        content: "Great, let me Slack someone on our team to see if they are available now.",
+      });
+
+      // Wait 10 seconds WITHOUT typing indicator
+      await new Promise(r => setTimeout(r, 10000));
+
+      // THEN show typing for 3 seconds
+      setIsTyping(true);
+      await new Promise(r => setTimeout(r, 3000));
+      setIsTyping(false);
+
+      // Second message
+      addChatMessage({
+        role: 'assistant',
+        content: "No one is available at the moment, but we'd love to schedule a chat: https://cal.com/andrew-simpson-gvo4qi/30min",
+      });
+
+      if (activeThread) {
+        updateUserSession({
+          activeThread: {
+            ...activeThread,
+            resolved: true,
+            awaitingResponse: false,
+          },
+        });
+      }
+      return;
+    }
+
+    if (action === 'share_flow_no') {
+      // Do nothing, just mark as resolved
+      if (activeThread) {
+        updateUserSession({
+          activeThread: {
+            ...activeThread,
+            resolved: true,
+            awaitingResponse: false,
+          },
+        });
+      }
+      return;
+    }
+
+    // Original button actions (keeping these for backwards compatibility)
     if (action === 'show_tip') {
       addChatMessage({
         role: 'assistant',
@@ -392,16 +432,6 @@ export function ChatWidget() {
       });
     } else if (action === 'decline_help') {
       addChatMessage({ role: 'assistant', content: "No problem — I'll be here if you need anything." });
-    } else if (action === 'schedule_call') {
-      addChatMessage({
-        role: 'assistant',
-        content: "Awesome — here's our calendar: https://cal.com/andrew-simpson-gvo4qi/30min",
-      });
-    } else if (action === 'send_tips') {
-      addChatMessage({
-        role: 'assistant',
-        content: "Here are some quick tips:\n\n1. Keep demos under 10 steps\n2. Use clear annotations\n3. Start with your product's \"aha\" moment",
-      });
     }
 
     if (activeThread && action !== 'hubspot_still_broken') {
