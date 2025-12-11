@@ -19,7 +19,9 @@ interface AppContextType {
   updateUserSession: (updates: Partial<UserSession>) => void;
 
   chatMessages: ChatMessage[];
-  addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp'>) => void;
+  addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp' | 'viewed'>) => void;
+  markMessagesAsViewed: () => void; // NEW
+  unreadCount: number; // NEW
   isTyping: boolean;
   setIsTyping: (typing: boolean) => void;
   isChatOpen: boolean;
@@ -90,6 +92,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const integrationAttemptRef = useRef<Record<string, number>>({});
   const cancelTriggerRef = useRef(false);
 
+  // NEW: Calculate unread count
+  const unreadCount = chatMessages.filter(m => m.role === 'assistant' && !m.viewed).length;
+
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
     setUserSession((prev) => ({ ...prev, ...updates }));
   }, []);
@@ -116,15 +121,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const publishDemo = useCallback(() => {
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
-    // Mark that demo was published this session to disable stuck detection
     updateUserSession({ hasPublishedThisSession: true });
   }, [updateUserSession]);
 
   const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
 
-  // --------------------------
-  // INTEGRATIONS - UPDATED
-  // --------------------------
   const connectIntegration = useCallback(async (integrationId: string) => {
     if (!integrationAttemptRef.current[integrationId]) integrationAttemptRef.current[integrationId] = 0;
     integrationAttemptRef.current[integrationId] += 1;
@@ -133,8 +134,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     const currentIntegration = integrations.find(i => i.id === integrationId);
     if (currentIntegration?.connected) return;
 
-    // Only cancel trigger for non-HubSpot integrations when user attempts to reconnect
-    // For HubSpot, let the first trigger go through, but cancel if Lee has already reached out
     if (integrationId !== 'hubspot') {
       setPendingTrigger((prev) => {
         const prevDetails = prev?.details?.toLowerCase();
@@ -147,10 +146,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return prev;
       });
     } else {
-      // For HubSpot: if Lee has already started the conversation, don't trigger again
       const activeThread = userSession.activeThread;
       if (activeThread?.type === 'error' && activeThread.integration === 'hubspot' && activeThread.hubspotFlowStage) {
-        // Lee has already reached out, don't restart the flow
         setPendingTrigger((prev) => {
           if (!prev) return prev;
           if (prev.type === 'error' && prev.details?.toLowerCase().includes('hubspot')) {
@@ -165,7 +162,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'connecting' } : i));
     await new Promise((r) => setTimeout(r, 300));
 
-    // HubSpot ALWAYS fails with error code 500
     if (integrationId === 'hubspot') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed: Error 500 - Internal Server Error' });
@@ -173,7 +169,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Salesforce always fails
     if (integrationId === 'salesforce') {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({ id: integrationId, message: 'OAuth connection failed for Salesforce.' });
@@ -181,7 +176,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    // Google Analytics: fail on first attempt, succeed on second
     if (attempt === 1) {
       setIntegrations(prev => prev.map(i => i.id === integrationId ? { ...i, status: 'error', connected: false } : i));
       setIntegrationError({
@@ -197,9 +191,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const clearIntegrationError = useCallback(() => setIntegrationError(null), []);
 
-  const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp'>) => {
-    const newMessage: ChatMessage = { ...message, id: crypto.randomUUID(), timestamp: new Date() };
+  const addChatMessage = useCallback((message: Omit<ChatMessage, 'id' | 'timestamp' | 'viewed'>) => {
+    const newMessage: ChatMessage = { 
+      ...message, 
+      id: crypto.randomUUID(), 
+      timestamp: new Date(),
+      viewed: message.role === 'user' ? true : false // User messages are auto-viewed, assistant messages start unviewed
+    };
     setChatMessages(prev => [...prev, newMessage]);
+  }, []);
+
+  // NEW: Mark all messages as viewed
+  const markMessagesAsViewed = useCallback(() => {
+    setChatMessages(prev => prev.map(msg => ({ ...msg, viewed: true })));
   }, []);
 
   const clearSnippet = useCallback(() => {
@@ -240,9 +244,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setSnippetMessage(null);
   }, []);
 
-  // --------------------------
-  // HANDLE PENDING TRIGGERS - UPDATED WITH NEW SHARE FLOW
-  // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
 
@@ -250,7 +251,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isProcessingRef.current = true;
       const currentTrigger = { ...pendingTrigger };
 
-      // Wait 20 seconds for HubSpot errors, 10 seconds for others
       const isHubSpot = currentTrigger.details?.includes('hubspot');
       const delay = isHubSpot ? 20000 : 10000;
       await new Promise(r => setTimeout(r, delay));
@@ -273,7 +273,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      // Send messages
       if (currentTrigger.type === 'error' && currentTrigger.details) {
         const [triggerType, integrationId] = currentTrigger.details.split(':');
         if (triggerType === 'integration') {
@@ -281,7 +280,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           const integrationName = integration?.name || integrationId;
 
           if (integrationId === 'hubspot') {
-            // NEW HUBSPOT FLOW
             addChatMessage({
               role: 'assistant',
               content: "Hey, Alex, looks like your HubSpot integration didn't work.",
@@ -307,7 +305,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               },
             });
           } else if (integrationId === 'salesforce') {
-            // SALESFORCE MESSAGES
             addChatMessage({
               role: 'assistant',
               content: "Hey, Alex, I'm Lee from Flowtide. I noticed you ran into an error when trying to connect to Salesforce.",
@@ -332,7 +329,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               },
             });
           } else {
-            // Google Analytics flow (original)
             addChatMessage({
               role: 'assistant',
               content: `Hi Alex, I'm Lee!\n\nIt looks like you ran into an error while connecting ${integrationName}. Sorry about that!`,
@@ -365,7 +361,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       } else if (pendingTrigger.type === 'stuck') {
         const stepId = pendingTrigger.details;
 
-        // First message
         addChatMessage({
           role: 'assistant',
           content: "Hey, Alex, looks like you might be stuck. I want to help you feel confident to publish your demo!",
@@ -373,7 +368,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         await new Promise(r => setTimeout(r, 2000));
 
-        // Second message
         addChatMessage({
           role: 'assistant',
           content: "Want help picking what to do next to finish your demo?",
@@ -395,13 +389,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           },
         });
       } else if (pendingTrigger.type === 'share') {
-        // New share flow - triggers 30 seconds after publish if they haven't copied the link
         addChatMessage({
           role: 'assistant',
           content: "Hey, Alex, congrats on publishing your first demo 🥳! Most teams share their demo with a few teammates before sending it to prospects.",
         });
 
-        // Wait 3 seconds with typing indicator
         setIsTyping(true);
         await new Promise(r => setTimeout(r, 3000));
         setIsTyping(false);
@@ -433,7 +425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
 
     handleTrigger();
-  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession, findIntegration]);
+  }, [pendingTrigger, userSession, integrations, addChatMessage, updateUserSession, findIntegration, setIsTyping]);
 
   return (
     <AppContext.Provider
@@ -441,7 +433,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         demo, setDemo, addStep, updateStep, removeStep, reorderSteps, publishDemo,
         integrations, connectIntegration, integrationError, clearIntegrationError,
         userSession, updateUserSession,
-        chatMessages, addChatMessage, isTyping, setIsTyping, isChatOpen, setIsChatOpen,
+        chatMessages, addChatMessage, markMessagesAsViewed, unreadCount,
+        isTyping, setIsTyping, isChatOpen, setIsChatOpen,
         triggerError, triggerStuck, triggerShareFlow,
         showSnippet, snippetMessage, clearSnippet,
         resetDemo,
