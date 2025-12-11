@@ -27,7 +27,7 @@ interface AppContextType {
 
   triggerError: (type: 'integration' | 'upload', details: string) => void;
   triggerStuck: (stepId: string) => void;
-  triggerHappyMoment: () => void;
+  triggerShareFlow: () => void;
 
   showSnippet: boolean;
   snippetMessage: string | null;
@@ -81,7 +81,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [snippetMessage, setSnippetMessage] = useState<string | null>(null);
 
   const [pendingTrigger, setPendingTrigger] = useState<{
-    type: 'error' | 'stuck' | 'happy';
+    type: 'error' | 'stuck' | 'share';
     details?: string;
   } | null>(null);
 
@@ -216,10 +216,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setPendingTrigger({ type: 'stuck', details: stepId });
   }, [userSession.stuckPromptedSteps, updateUserSession]);
 
-  const triggerHappyMoment = useCallback(() => {
+  const triggerShareFlow = useCallback(() => {
     if (isProcessingRef.current) return;
     if (userSession.firstDemoCompleted) return;
-    setPendingTrigger({ type: 'happy' });
+    setPendingTrigger({ type: 'share' });
   }, [userSession.firstDemoCompleted]);
 
   const resetDemo = useCallback(() => {
@@ -238,7 +238,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // --------------------------
-  // HANDLE PENDING TRIGGERS - UPDATED WITH NEW HUBSPOT FLOW AND STUCK FLOW
+  // HANDLE PENDING TRIGGERS - UPDATED WITH NEW SHARE FLOW
   // --------------------------
   useEffect(() => {
     if (!pendingTrigger || isProcessingRef.current) return;
@@ -391,21 +391,32 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             followUpSent: false,
           },
         });
-      } else if (pendingTrigger.type === 'happy') {
+      } else if (pendingTrigger.type === 'share') {
+        // New share flow - triggers 30 seconds after publish if they haven't copied the link
         addChatMessage({
           role: 'assistant',
-          content: "🎉 Nice work, Alex! You just published your first demo!\n\nWant to schedule a quick call to learn some pro tips?",
+          content: "Hey, Alex, congrats on publishing your first demo 🥳! Most teams share their demo with a few teammates before sending it to prospects.",
+        });
+
+        // Wait 3 seconds with typing indicator
+        setIsTyping(true);
+        await new Promise(r => setTimeout(r, 3000));
+        setIsTyping(false);
+
+        addChatMessage({
+          role: 'assistant',
+          content: "Open to speaking with an expert at Flowtide to learn powerful use cases and best practices?",
           buttons: [
-            { label: "Sure, let's chat", action: 'schedule_call' },
-            { label: "Just send me tips", action: 'send_tips' },
+            { label: "Yes", action: 'share_flow_yes' },
+            { label: "No", action: 'share_flow_no' },
           ],
         });
 
         updateUserSession({
           firstDemoCompleted: true,
           activeThread: {
-            id: `happy-${Date.now()}`,
-            type: 'happy',
+            id: `share-${Date.now()}`,
+            type: 'share',
             resolved: false,
             awaitingResponse: true,
             skipNextReply: false,
@@ -428,7 +439,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         integrations, connectIntegration, integrationError, clearIntegrationError,
         userSession, updateUserSession,
         chatMessages, addChatMessage, isTyping, setIsTyping, isChatOpen, setIsChatOpen,
-        triggerError, triggerStuck, triggerHappyMoment,
+        triggerError, triggerStuck, triggerShareFlow,
         showSnippet, snippetMessage, clearSnippet,
         resetDemo,
       }}
