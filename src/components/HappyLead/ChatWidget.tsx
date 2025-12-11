@@ -12,6 +12,8 @@ export function ChatWidget() {
     integrations,
     chatMessages,
     addChatMessage,
+    markMessagesAsViewed,
+    unreadCount,
     isTyping,
     setIsTyping,
     isChatOpen,
@@ -26,6 +28,9 @@ export function ChatWidget() {
   const [inputValue, setInputValue] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const [showMessagePreview, setShowMessagePreview] = useState(false);
+  const [previewMessage, setPreviewMessage] = useState<string>('');
+  const previewTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -34,8 +39,42 @@ export function ChatWidget() {
   useEffect(() => {
     if (isChatOpen) {
       setTimeout(() => inputRef.current?.focus(), 100);
+      // Mark all messages as viewed when chat opens
+      markMessagesAsViewed();
     }
-  }, [isChatOpen]);
+  }, [isChatOpen, markMessagesAsViewed]);
+
+  // NEW: Show message preview when new assistant message arrives and chat is closed
+  useEffect(() => {
+    if (!isChatOpen && chatMessages.length > 0) {
+      const lastMessage = chatMessages[chatMessages.length - 1];
+      
+      // Only show preview for new unviewed assistant messages
+      if (lastMessage.role === 'assistant' && !lastMessage.viewed) {
+        setPreviewMessage(lastMessage.content);
+        setShowMessagePreview(true);
+
+        // Clear any existing timeout
+        if (previewTimeoutRef.current) {
+          clearTimeout(previewTimeoutRef.current);
+        }
+
+        // Auto-hide after 5 seconds
+        previewTimeoutRef.current = setTimeout(() => {
+          setShowMessagePreview(false);
+        }, 5000);
+      }
+    } else {
+      // Hide preview when chat is open
+      setShowMessagePreview(false);
+    }
+
+    return () => {
+      if (previewTimeoutRef.current) {
+        clearTimeout(previewTimeoutRef.current);
+      }
+    };
+  }, [chatMessages, isChatOpen]);
 
   // --------------------------
   // Handle user message - UPDATED WITH HUBSPOT FLOW
@@ -451,6 +490,12 @@ export function ChatWidget() {
     }
   };
 
+  // NEW: Handle clicking on message preview (opens chat and marks as viewed)
+  const handlePreviewClick = () => {
+    setShowMessagePreview(false);
+    setIsChatOpen(true);
+  };
+
   // --------------------------
   // Snippet floater
   // --------------------------
@@ -476,10 +521,53 @@ export function ChatWidget() {
     );
   };
 
+  // NEW: Message Preview Component
+  const MessagePreview = () => {
+    if (!showMessagePreview || !previewMessage) return null;
+
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.95 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        exit={{ opacity: 0, y: 10, scale: 0.95 }}
+        transition={{ duration: 0.2 }}
+        onClick={handlePreviewClick}
+        className="fixed bottom-24 right-6 z-50 max-w-sm cursor-pointer rounded-lg bg-white border border-border shadow-lg hover:shadow-xl transition-shadow"
+      >
+        <div className="flex items-start gap-3 p-4">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-accent">
+            <Smile className="h-4 w-4 text-accent-foreground" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center justify-between mb-1">
+              <p className="font-semibold text-sm text-foreground">Lee</p>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowMessagePreview(false);
+                }}
+                className="text-muted-foreground hover:text-foreground transition-colors"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="text-sm text-muted-foreground line-clamp-2">
+              {previewMessage}
+            </p>
+          </div>
+        </div>
+      </motion.div>
+    );
+  };
+
   return (
     <>
       <AnimatePresence>
         <SnippetFloater />
+      </AnimatePresence>
+
+      <AnimatePresence>
+        <MessagePreview />
       </AnimatePresence>
 
       <AnimatePresence>
@@ -494,10 +582,14 @@ export function ChatWidget() {
             className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-accent text-accent-foreground shadow-lg shadow-accent/25 transition-shadow hover:shadow-xl hover:shadow-accent/30"
           >
             <MessageCircle className="h-6 w-6" />
-            {chatMessages.length > 0 && (
-              <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
-                {chatMessages.filter((m) => m.role === 'assistant').length}
-              </span>
+            {unreadCount > 0 && (
+              <motion.span
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground"
+              >
+                {unreadCount}
+              </motion.span>
             )}
           </motion.button>
         )}
