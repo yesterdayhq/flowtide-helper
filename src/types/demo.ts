@@ -38,7 +38,7 @@ export interface ChatButton {
   action: string;
 }
 
-export type ThreadType = 'error' | 'stuck' | 'happy' | 'general';
+export type ThreadType = 'error' | 'stuck' | 'share' | 'general';
 
 export interface ActiveThread {
   id: string;
@@ -66,6 +66,7 @@ export interface UserSession {
   greetingSentThisSession: boolean;
   lastInteraction: Date | null;
   firstDemoCompleted: boolean;
+  hasPublishedThisSession: boolean;
   currentPage: string;
   currentStep: string | null;
   lastInstruction: string | null;
