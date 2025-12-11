@@ -293,12 +293,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             updateUserSession({
               activeThread: {
+                id: `error-${Date.now()}`,
                 type: 'error',
                 integration: integrationId,
                 resolved: false,
                 awaitingResponse: true,
                 skipNextReply: false,
                 hubspotFlowStage: 'awaiting_error_code',
+                followUpSent: false,
               },
             });
           } else if (integrationId === 'salesforce') {
@@ -317,11 +319,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             updateUserSession({
               activeThread: {
+                id: `error-${Date.now()}`,
                 type: 'error',
                 integration: integrationId,
                 resolved: false,
                 awaitingResponse: true,
                 skipNextReply: false,
+                followUpSent: false,
               },
             });
           } else {
@@ -344,11 +348,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
             updateUserSession({
               activeThread: {
+                id: `error-${Date.now()}`,
                 type: 'error',
                 integration: integrationId,
                 resolved: false,
                 awaitingResponse: true,
                 skipNextReply: false,
+                followUpSent: false,
               },
             });
           }
@@ -376,11 +382,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         updateUserSession({
           activeThread: {
+            id: `stuck-${Date.now()}`,
             type: 'stuck',
             stepId,
             resolved: false,
             awaitingResponse: true,
             skipNextReply: false,
+            followUpSent: false,
           },
         });
       } else if (pendingTrigger.type === 'happy') {
@@ -396,10 +404,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updateUserSession({
           firstDemoCompleted: true,
           activeThread: {
+            id: `happy-${Date.now()}`,
             type: 'happy',
             resolved: false,
             awaitingResponse: true,
             skipNextReply: false,
+            followUpSent: false,
           },
         });
       }

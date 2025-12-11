@@ -15,10 +15,11 @@ import {
   rectSortingStrategy,
 } from '@dnd-kit/sortable';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Play, Rocket, Sparkles } from 'lucide-react';
+import { Plus, Play, Rocket, Sparkles, Share2, Check } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { StepCard } from './StepCard';
 import { DemoPreview } from './DemoPreview';
+import { ShareDialog } from './ShareDialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -35,6 +36,7 @@ export function DemoBuilder() {
   } = useApp();
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
 
   const sensors = useSensors(
@@ -114,16 +116,31 @@ export function DemoBuilder() {
               <Play className="h-4 w-4" />
               Preview
             </Button>
+            {demo.isPublished && (
+              <Button
+                variant="outline"
+                onClick={() => setIsShareOpen(true)}
+                className="gap-2"
+              >
+                <Share2 className="h-4 w-4" />
+                Share
+              </Button>
+            )}
             <Button
               variant="premium"
               onClick={handlePublish}
-              disabled={demo.steps.length === 0 || isPublishing}
+              disabled={demo.steps.length === 0 || isPublishing || demo.isPublished}
               className="gap-2"
             >
               {isPublishing ? (
                 <>
                   <Sparkles className="h-4 w-4 animate-spin" />
                   Publishing...
+                </>
+              ) : demo.isPublished ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  Published
                 </>
               ) : (
                 <>
@@ -205,6 +222,14 @@ export function DemoBuilder() {
       <DemoPreview
         isOpen={isPreviewOpen}
         onClose={() => setIsPreviewOpen(false)}
+      />
+
+      {/* Share dialog */}
+      <ShareDialog
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        demoId={demo.id}
+        demoTitle={demo.title}
       />
     </>
   );
