@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useApp } from '@/context/AppContext';
 
 export function StuckDetection() {
@@ -32,22 +32,22 @@ export function StuckDetection() {
 
   // Helper: Check if activity meets Scenario 1 exemption criteria
   // This ONLY exempts Scenario 1 (inactivity), NOT Scenario 2 (spam behaviors)
-  const meetsExemptionCriteria = () => {
+  const meetsExemptionCriteria = useCallback(() => {
     if (!demo) return false;
     const imageCount = demo.steps.length;
     const annotationCount = demo.steps.filter(step => step.annotation && step.annotation.trim().length > 0).length;
     // Must have 3+ images AND each image must have an annotation
     return imageCount >= 3 && imageCount === annotationCount;
-  };
+  }, [demo]);
 
   // Helper: Clean up old timestamps (outside 1-minute window)
-  const cleanupOldTimestamps = (timestamps: number[], windowMs: number = 60000) => {
+  const cleanupOldTimestamps = useCallback((timestamps: number[], windowMs: number = 60000) => {
     const now = Date.now();
     return timestamps.filter(ts => now - ts < windowMs);
-  };
+  }, []);
 
   // Helper: Cancel ALL stuck detection timers
-  const cancelAllStuckTimers = () => {
+  const cancelAllStuckTimers = useCallback(() => {
     console.log('🛑 Canceling all stuck detection timers');
     
     if (scenario1TimerRef.current) {
@@ -59,7 +59,7 @@ export function StuckDetection() {
       clearTimeout(scenario2TimeoutRef.current);
       scenario2TimeoutRef.current = null;
     }
-  };
+  }, []);
 
   // Track if demo gets published this session - CRITICAL FOR DISABLING STUCK DETECTION
   useEffect(() => {
@@ -69,10 +69,10 @@ export function StuckDetection() {
       // Cancel all timers immediately
       cancelAllStuckTimers();
     }
-  }, [userSession.hasPublishedThisSession]);
+  }, [userSession.hasPublishedThisSession, cancelAllStuckTimers]);
 
   // Helper: Trigger stuck message (used by both scenarios)
-  const triggerStuckMessage = (scenario: 'scenario1' | 'scenario2', behaviorType?: 'annotation' | 'preview' | 'delete') => {
+  const triggerStuckMessage = useCallback((scenario: 'scenario1' | 'scenario2', behaviorType?: 'annotation' | 'preview' | 'delete') => {
     console.log('🚨 triggerStuckMessage called for:', scenario, behaviorType || '');
     
     // Don't trigger if demo was published this session (check ref for latest value)
@@ -97,10 +97,10 @@ export function StuckDetection() {
     const stepId = demo?.steps[0]?.id || `general-stuck-${scenario}`;
     console.log('📞 Calling triggerStuck with stepId:', stepId);
     triggerStuck(stepId);
-  };
+  }, [demo, triggerStuck, cancelAllStuckTimers]);
 
   // Reset Scenario 1 timer (resets to 60 seconds on activity)
-  const resetScenario1Timer = () => {
+  const resetScenario1Timer = useCallback(() => {
     console.log('⏲️ resetScenario1Timer called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedRef.current, 'meetsExemption:', meetsExemptionCriteria());
     
     // Don't reset if demo was published, any stuck flow triggered, or if exemption criteria met
@@ -127,7 +127,7 @@ export function StuckDetection() {
         console.log('❌ Timer fired but conditions not met - hasPublished:', hasPublishedRef.current);
       }
     }, 60000);
-  };
+  }, [meetsExemptionCriteria, triggerStuckMessage]);
 
   // Track first upload and activity for Scenario 1
   useEffect(() => {
@@ -151,10 +151,10 @@ export function StuckDetection() {
         clearTimeout(scenario1TimerRef.current);
       }
     };
-  }, [demo?.steps.length, demo?.steps]);
+  }, [demo?.steps.length, demo?.steps, resetScenario1Timer]);
 
   // Scenario 2: Track preview opens
-  const trackPreviewOpen = () => {
+  const trackPreviewOpen = useCallback(() => {
     console.log('👁️ trackPreviewOpen called - hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedRef.current);
     
     // Stop if a stuck flow has already been triggered OR if demo was published
@@ -190,7 +190,7 @@ export function StuckDetection() {
       
       console.log('✅ Scenario 2 timeout scheduled for preview');
     }
-  };
+  }, [cleanupOldTimestamps, triggerStuckMessage]);
 
   // Scenario 2: Track image deletions/replacements
   useEffect(() => {
@@ -230,10 +230,10 @@ export function StuckDetection() {
     }
 
     previousStepCountRef.current = currentStepCount;
-  }, [demo?.steps.length]);
+  }, [demo?.steps.length, cleanupOldTimestamps, triggerStuckMessage]);
 
   // Track annotation interactions (opening, canceling, saving - ANY interaction)
-  const trackAnnotationInteraction = (stepId: string) => {
+  const trackAnnotationInteraction = useCallback((stepId: string) => {
     console.log('✏️ trackAnnotationInteraction called for step:', stepId, 'hasTriggered:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedRef.current);
     
     // Stop if a stuck flow has already been triggered OR if demo was published
@@ -273,7 +273,7 @@ export function StuckDetection() {
         }
       }, 10000);
     }
-  };
+  }, [cleanupOldTimestamps, triggerStuckMessage]);
 
   // Expose tracking functions globally
   useEffect(() => {
@@ -285,7 +285,7 @@ export function StuckDetection() {
       delete (window as any).__trackPreviewOpen;
       delete (window as any).__trackAnnotationInteraction;
     };
-  }, []);
+  }, [trackPreviewOpen, trackAnnotationInteraction]);
 
   // Cleanup on unmount
   useEffect(() => {
