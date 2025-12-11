@@ -48,6 +48,7 @@ const defaultUserSession: UserSession = {
   greetingSentThisSession: false,
   lastInteraction: null,
   firstDemoCompleted: false,
+  hasPublishedThisSession: false,
   currentPage: 'builder',
   currentStep: null,
   lastInstruction: null,
@@ -115,7 +116,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   const publishDemo = useCallback(() => {
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
-  }, []);
+    // Mark that demo was published this session to disable stuck detection
+    updateUserSession({ hasPublishedThisSession: true });
+  }, [updateUserSession]);
 
   const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
 
@@ -226,7 +229,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setDemo({ id: crypto.randomUUID(), title: 'My First Demo', steps: [], isPublished: false, createdAt: new Date(), updatedAt: new Date() });
     setIntegrations(defaultIntegrations);
     setIntegrationError(null);
-    setUserSession({ ...defaultUserSession, hasBeenIntroduced: false, greetingSentThisSession: false });
+    setUserSession({ ...defaultUserSession, hasBeenIntroduced: false, greetingSentThisSession: false, hasPublishedThisSession: false });
     setChatMessages([]);
     setIsTyping(false);
     setPendingTrigger(null);
