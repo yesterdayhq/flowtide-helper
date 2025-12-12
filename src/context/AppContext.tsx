@@ -20,8 +20,8 @@ interface AppContextType {
 
   chatMessages: ChatMessage[];
   addChatMessage: (message: Omit<ChatMessage, 'id' | 'timestamp' | 'viewed'>) => void;
-  markMessagesAsViewed: () => void; // NEW
-  unreadCount: number; // NEW
+  markMessagesAsViewed: () => void;
+  unreadCount: number;
   isTyping: boolean;
   setIsTyping: (typing: boolean) => void;
   isChatOpen: boolean;
@@ -92,7 +92,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const integrationAttemptRef = useRef<Record<string, number>>({});
   const cancelTriggerRef = useRef(false);
 
-  // NEW: Calculate unread count
   const unreadCount = chatMessages.filter(m => m.role === 'assistant' && !m.viewed).length;
 
   const updateUserSession = useCallback((updates: Partial<UserSession>) => {
@@ -120,8 +119,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const publishDemo = useCallback(() => {
+    console.log('🚀 PUBLISH CLICKED - Clearing stuck triggers');
     setDemo((prev) => prev ? { ...prev, isPublished: true, updatedAt: new Date() } : prev);
     updateUserSession({ hasPublishedThisSession: true });
+    
+    // CRITICAL: Clear any pending stuck triggers immediately
+    setPendingTrigger((prev) => {
+      if (prev?.type === 'stuck') {
+        console.log('🚫 PUBLISH: Canceling pending stuck trigger');
+        isProcessingRef.current = false;
+        return null;
+      }
+      return prev;
+    });
   }, [updateUserSession]);
 
   const findIntegration = useCallback((id: string) => integrations.find(i => i.id === id), [integrations]);
@@ -196,12 +206,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...message, 
       id: crypto.randomUUID(), 
       timestamp: new Date(),
-      viewed: message.role === 'user' ? true : false // User messages are auto-viewed, assistant messages start unviewed
+      viewed: message.role === 'user' ? true : false
     };
     setChatMessages(prev => [...prev, newMessage]);
   }, []);
 
-  // NEW: Mark all messages as viewed
   const markMessagesAsViewed = useCallback(() => {
     setChatMessages(prev => prev.map(msg => ({ ...msg, viewed: true })));
   }, []);
@@ -217,11 +226,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const triggerStuck = useCallback((stepId: string) => {
+    // CRITICAL: Don't queue if already published
+    if (userSession.hasPublishedThisSession) {
+      console.log('🚫 triggerStuck called but already published, ignoring');
+      return;
+    }
     if (isProcessingRef.current) return;
     if (userSession.stuckPromptedSteps.includes(stepId)) return;
+    console.log('📋 triggerStuck: Queueing stuck trigger for step:', stepId);
     updateUserSession({ stuckPromptedSteps: [...userSession.stuckPromptedSteps, stepId] });
     setPendingTrigger({ type: 'stuck', details: stepId });
-  }, [userSession.stuckPromptedSteps, updateUserSession]);
+  }, [userSession.stuckPromptedSteps, userSession.hasPublishedThisSession, updateUserSession]);
 
   const triggerShareFlow = useCallback(() => {
     if (isProcessingRef.current) return;
@@ -242,6 +257,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     integrationAttemptRef.current = {};
     setShowSnippet(false);
     setSnippetMessage(null);
+    
+    // Clear localStorage flag
+    try {
+      localStorage.removeItem('flowtide_hasPublished');
+    } catch (e) {
+      console.error('Failed to clear localStorage:', e);
+    }
   }, []);
 
   useEffect(() => {
@@ -258,6 +280,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (cancelTriggerRef.current || !pendingTrigger) {
         isProcessingRef.current = false;
         cancelTriggerRef.current = false;
+        return;
+      }
+
+      // CRITICAL: Check if published while waiting
+      if (currentTrigger.type === 'stuck' && userSession.hasPublishedThisSession) {
+        console.log('❌ Stuck trigger fired but user published while waiting, canceling');
+        setPendingTrigger(null);
+        isProcessingRef.current = false;
         return;
       }
 
@@ -358,9 +388,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             });
           }
         }
-      } else if (pendingTrigger.type === 'stuck') {
-        const stepId = pendingTrigger.details;
+      } else if (currentTrigger.type === 'stuck') {
+        const stepId = currentTrigger.details;
 
+        console.log('💬 Showing stuck message');
         addChatMessage({
           role: 'assistant',
           content: "Hey, Alex, looks like you might be stuck. I want to help you feel confident to publish your demo!",
@@ -388,7 +419,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             followUpSent: false,
           },
         });
-      } else if (pendingTrigger.type === 'share') {
+      } else if (currentTrigger.type === 'share') {
         addChatMessage({
           role: 'assistant',
           content: "Hey, Alex, congrats on publishing your first demo 🥳! Most teams share their demo with a few teammates before sending it to prospects.",
