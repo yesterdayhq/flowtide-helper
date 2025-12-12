@@ -7,8 +7,14 @@ export function StuckDetection() {
   // GLOBAL: Track if ANY stuck flow has been triggered
   const hasTriggeredAnyStuckFlowRef = useRef(false);
 
-  // Track if demo has been published this session - START WITH FALSE
-  const hasPublishedRef = useRef(false);
+  // Track if demo has been published this session - USE LOCALSTORAGE
+  const hasPublishedRef = useRef(() => {
+    try {
+      return localStorage.getItem('flowtide_hasPublished') === 'true';
+    } catch {
+      return false;
+    }
+  });
 
   // Scenario 1: Inactivity tracking
   const scenario1TimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -40,11 +46,16 @@ export function StuckDetection() {
     }
   }, []);
 
-  // Keep ref in sync with userSession - ONLY TRANSITION TO TRUE, NEVER BACK
+  // Sync published state to localStorage when it changes
   useEffect(() => {
     if (userSession.hasPublishedThisSession && !hasPublishedRef.current) {
-      console.log('📢 Syncing hasPublished to true from userSession');
+      console.log('📢 Syncing hasPublished to true and saving to localStorage');
       hasPublishedRef.current = true;
+      try {
+        localStorage.setItem('flowtide_hasPublished', 'true');
+      } catch (e) {
+        console.error('Failed to save to localStorage:', e);
+      }
       cancelAllStuckTimers();
     }
   }, [userSession.hasPublishedThisSession, cancelAllStuckTimers]);
