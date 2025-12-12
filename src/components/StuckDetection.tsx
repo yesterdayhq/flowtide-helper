@@ -52,12 +52,20 @@ export function StuckDetection() {
     if (userSession.hasPublishedThisSession && !hasPublishedRef.current) {
       console.log('📢 Syncing hasPublished to true and saving to localStorage');
       hasPublishedRef.current = true;
+      
+      // Set flag BEFORE canceling timers so any firing timers see it
       try {
         localStorage.setItem('flowtide_hasPublished', 'true');
       } catch (e) {
         console.error('Failed to save to localStorage:', e);
       }
+      
+      // Cancel all timers AFTER setting the flag
       cancelAllStuckTimers();
+      
+      // Also mark as triggered to prevent any new triggers
+      hasTriggeredAnyStuckFlowRef.current = true;
+      console.log('🔒 Locking stuck detection - setting hasTriggered to true on publish');
     }
   }, [userSession.hasPublishedThisSession, cancelAllStuckTimers]);
 
