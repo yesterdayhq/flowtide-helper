@@ -7,8 +7,8 @@ export function StuckDetection() {
   // GLOBAL: Track if ANY stuck flow has been triggered
   const hasTriggeredAnyStuckFlowRef = useRef(false);
 
-  // Track if demo has been published this session
-  const hasPublishedRef = useRef(userSession.hasPublishedThisSession);
+  // Track if demo has been published this session - START WITH FALSE
+  const hasPublishedRef = useRef(false);
 
   // Scenario 1: Inactivity tracking
   const scenario1TimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -23,28 +23,7 @@ export function StuckDetection() {
   // Track previous step count to detect deletions
   const previousStepCountRef = useRef(demo?.steps.length || 0);
 
-  console.log('🔍 StuckDetection mounted - hasTriggeredAnyStuckFlow:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', userSession.hasPublishedThisSession);
-
-  // Keep ref in sync with userSession
-  useEffect(() => {
-    hasPublishedRef.current = userSession.hasPublishedThisSession;
-  }, [userSession.hasPublishedThisSession]);
-
-  // Helper: Check if activity meets Scenario 1 exemption criteria
-  // This ONLY exempts Scenario 1 (inactivity), NOT Scenario 2 (spam behaviors)
-  const meetsExemptionCriteria = useCallback(() => {
-    if (!demo) return false;
-    const imageCount = demo.steps.length;
-    const annotationCount = demo.steps.filter(step => step.annotation && step.annotation.trim().length > 0).length;
-    // Must have 3+ images AND each image must have an annotation
-    return imageCount >= 3 && imageCount === annotationCount;
-  }, [demo]);
-
-  // Helper: Clean up old timestamps (outside 1-minute window)
-  const cleanupOldTimestamps = useCallback((timestamps: number[], windowMs: number = 60000) => {
-    const now = Date.now();
-    return timestamps.filter(ts => now - ts < windowMs);
-  }, []);
+  console.log('🔍 StuckDetection mounted - hasTriggeredAnyStuckFlow:', hasTriggeredAnyStuckFlowRef.current, 'hasPublished:', hasPublishedRef.current);
 
   // Helper: Cancel ALL stuck detection timers
   const cancelAllStuckTimers = useCallback(() => {
@@ -61,6 +40,15 @@ export function StuckDetection() {
     }
   }, []);
 
+  // Keep ref in sync with userSession - ONLY TRANSITION TO TRUE, NEVER BACK
+  useEffect(() => {
+    if (userSession.hasPublishedThisSession && !hasPublishedRef.current) {
+      console.log('📢 Syncing hasPublished to true from userSession');
+      hasPublishedRef.current = true;
+      cancelAllStuckTimers();
+    }
+  }, [userSession.hasPublishedThisSession, cancelAllStuckTimers]);
+
   // Track if demo gets published this session - CRITICAL FOR DISABLING STUCK DETECTION
   useEffect(() => {
     if (userSession.hasPublishedThisSession) {
@@ -70,6 +58,22 @@ export function StuckDetection() {
       cancelAllStuckTimers();
     }
   }, [userSession.hasPublishedThisSession, cancelAllStuckTimers]);
+
+  // Helper: Check if activity meets Scenario 1 exemption criteria
+  // This ONLY exempts Scenario 1 (inactivity), NOT Scenario 2 (spam behaviors)
+  const meetsExemptionCriteria = useCallback(() => {
+    if (!demo) return false;
+    const imageCount = demo.steps.length;
+    const annotationCount = demo.steps.filter(step => step.annotation && step.annotation.trim().length > 0).length;
+    // Must have 3+ images AND each image must have an annotation
+    return imageCount >= 3 && imageCount === annotationCount;
+  }, [demo]);
+
+  // Helper: Clean up old timestamps (outside 1-minute window)
+  const cleanupOldTimestamps = useCallback((timestamps: number[], windowMs: number = 60000) => {
+    const now = Date.now();
+    return timestamps.filter(ts => now - ts < windowMs);
+  }, []);
 
   // Helper: Trigger stuck message (used by both scenarios)
   const triggerStuckMessage = useCallback((scenario: 'scenario1' | 'scenario2', behaviorType?: 'annotation' | 'preview' | 'delete') => {
