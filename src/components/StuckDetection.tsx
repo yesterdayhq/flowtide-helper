@@ -196,11 +196,11 @@ export function StuckDetection() {
       
       scenario2TimeoutRef.current = setTimeout(() => {
         console.log('⏰ 10 seconds elapsed - checking publish status before triggering');
-        // Check ref for the latest publish status when timer fires
-        if (!hasPublishedRef.current) {
+        // CRITICAL: Re-check BOTH refs when timer fires, not using closure values
+        if (!hasPublishedRef.current && !hasTriggeredAnyStuckFlowRef.current) {
           triggerStuckMessage('scenario2', 'preview');
         } else {
-          console.log('❌ Timer fired but demo was published');
+          console.log('❌ Timer fired but demo was published or stuck already triggered');
         }
       }, 10000);
       
@@ -281,11 +281,11 @@ export function StuckDetection() {
       
       scenario2TimeoutRef.current = setTimeout(() => {
         console.log('⏰ 10 seconds elapsed from annotation interactions - checking publish status');
-        // Check ref for the latest publish status when timer fires
-        if (!hasPublishedRef.current) {
+        // CRITICAL: Re-check BOTH refs when timer fires, not using closure values
+        if (!hasPublishedRef.current && !hasTriggeredAnyStuckFlowRef.current) {
           triggerStuckMessage('scenario2', 'annotation');
         } else {
-          console.log('❌ Timer fired but demo was published');
+          console.log('❌ Timer fired but demo was published or stuck already triggered');
         }
       }, 10000);
     }
