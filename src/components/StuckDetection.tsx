@@ -8,13 +8,14 @@ export function StuckDetection() {
   const hasTriggeredAnyStuckFlowRef = useRef(false);
 
   // Track if demo has been published this session - USE LOCALSTORAGE
-  const hasPublishedRef = useRef(() => {
+  const getInitialPublishedState = () => {
     try {
       return localStorage.getItem('flowtide_hasPublished') === 'true';
     } catch {
       return false;
     }
-  });
+  };
+  const hasPublishedRef = useRef(getInitialPublishedState());
 
   // Scenario 1: Inactivity tracking
   const scenario1TimerRef = useRef<NodeJS.Timeout | null>(null);
