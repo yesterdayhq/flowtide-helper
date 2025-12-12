@@ -7,13 +7,14 @@ export function ShareFlowDetection() {
   const shareTimerRef = useRef<NodeJS.Timeout | null>(null);
   const hasPublishedRef = useRef(false);
   const hasCopiedRef = useRef(false);
+  const hasTriggeredShareFlowRef = useRef(false);
   
   // Track when demo gets published
   useEffect(() => {
     if (!demo || userSession.firstDemoCompleted) return;
     
     // If demo just got published and we haven't started tracking yet
-    if (demo.isPublished && !hasPublishedRef.current) {
+    if (demo.isPublished && !hasPublishedRef.current && !hasTriggeredShareFlowRef.current) {
       console.log('📢 Demo published, starting 30-second timer');
       hasPublishedRef.current = true;
       
@@ -21,12 +22,13 @@ export function ShareFlowDetection() {
       shareTimerRef.current = setTimeout(() => {
         console.log('⏰ 30 seconds elapsed');
         
-        // Only trigger if they haven't copied the link
-        if (!hasCopiedRef.current) {
+        // Only trigger if they haven't copied the link and haven't already triggered
+        if (!hasCopiedRef.current && !hasTriggeredShareFlowRef.current) {
           console.log('📤 User has not copied, triggering share flow');
+          hasTriggeredShareFlowRef.current = true;
           triggerShareFlow();
         } else {
-          console.log('✅ User already copied, not triggering');
+          console.log('✅ User already copied or flow already triggered, not triggering');
         }
       }, 30000);
     }
