@@ -5,9 +5,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { HelmetProvider } from 'react-helmet-async';
 import { AppProvider } from '@/context/AppContext';
-import { ChatWidget } from '@/components/HappyLead/ChatWidget';
-import { StuckDetection } from '@/components/StuckDetection';
-import { ShareFlowDetection } from '@/components/ShareFlowDetection';
 import Index from './pages/Index';
 import Integrations from './pages/Integrations';
 import NotFound from './pages/NotFound';
@@ -18,8 +15,6 @@ const App = () => (
   <HelmetProvider>
     <QueryClientProvider client={queryClient}>
       <AppProvider>
-        <StuckDetection />
-        <ShareFlowDetection />
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -29,7 +24,6 @@ const App = () => (
               <Route path="/integrations" element={<Integrations />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
-            <ChatWidget />
           </BrowserRouter>
         </TooltipProvider>
       </AppProvider>
