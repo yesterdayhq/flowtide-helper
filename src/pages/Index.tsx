@@ -1,8 +1,19 @@
 import { Helmet } from 'react-helmet-async';
 import { Layout } from '@/components/Layout';
 import { DemoBuilder } from '@/components/DemoBuilder/DemoBuilder';
+import { Button } from '@/components/ui/button';
+import { MessageCircle } from 'lucide-react';
 
 const Index = () => {
+  // Test function to open HappyLead
+  const testHappyLead = () => {
+    if ((window as any).HappyLead) {
+      (window as any).HappyLead.open();
+    } else {
+      alert('HappyLead widget not loaded yet!');
+    }
+  };
+
   return (
     <>
       <Helmet>
@@ -13,6 +24,18 @@ const Index = () => {
         />
       </Helmet>
       <Layout>
+        {/* Test Button */}
+        <div className="mb-4 flex justify-end">
+          <Button 
+            onClick={testHappyLead}
+            variant="outline"
+            className="gap-2"
+          >
+            <MessageCircle className="h-4 w-4" />
+            Test HappyLead Widget
+          </Button>
+        </div>
+        
         <DemoBuilder />
       </Layout>
     </>
