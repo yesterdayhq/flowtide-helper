@@ -43,6 +43,14 @@ const Index = () => {
           name="description"
           content="Build beautiful, interactive product demos in minutes. Record screens, add annotations, and share with your team."
         />
+        <style>{`
+          /* Hide Lovable edit button */
+          [data-lovable-edit-button],
+          .lovable-edit-button,
+          a[href*="lovable.dev"] {
+            display: none !important;
+          }
+        `}</style>
       </Helmet>
       <Layout>
         {/* Test Triggers Dropdown */}
