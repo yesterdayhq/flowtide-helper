@@ -32,7 +32,6 @@ export function DemoBuilder() {
     removeStep,
     reorderSteps,
     publishDemo,
-    triggerHappyMoment,
   } = useApp();
 
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -66,8 +65,7 @@ export function DemoBuilder() {
     // Simulate publishing delay
     await new Promise((resolve) => setTimeout(resolve, 1500));
     publishDemo();
-    setIsPublishing(false);
-    triggerHappyMoment();
+    setIsPublishing(false)
   };
 
   const handlePreviewClick = () => {
