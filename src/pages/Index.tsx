@@ -10,9 +10,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MessageCircle, Wrench, Sparkles, AlertTriangle, Search, DollarSign, Star, Activity, Eye } from 'lucide-react';
+import { MessageCircle, Wrench, Sparkles, AlertTriangle, Search, DollarSign, Star, Activity, Eye, Clock, MousePointer, LogOut } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 const Index = () => {
+  const [behaviorData, setBehaviorData] = useState<any>(null);
+  const [showDebug, setShowDebug] = useState(false);
+
+  // Refresh behavior data
+  const refreshBehaviorData = () => {
+    if ((window as any).HappyLead) {
+      setBehaviorData((window as any).HappyLead.getBehaviorData());
+    }
+  };
+
+  useEffect(() => {
+    // Refresh every 2 seconds
+    const interval = setInterval(refreshBehaviorData, 2000);
+    return () => clearInterval(interval);
+  }, []);
+
   const triggerFlow = (flowName: string, context?: any) => {
     if ((window as any).HappyLead) {
       (window as any).HappyLead.trigger(flowName, context);
@@ -30,8 +47,51 @@ const Index = () => {
   };
 
   const viewBehaviorData = () => {
-    if ((window as any).HappyLead) {
-      console.log('[Flowtide] Behavior Data:', (window as any).HappyLead.getBehaviorData());
+    refreshBehaviorData();
+    setShowDebug(!showDebug);
+  };
+
+  // Playbook testing functions
+  const simulatePricingVisit = () => {
+    // Simulate navigation to pricing page
+    window.history.pushState({}, '', '/pricing');
+
+    // Give widget time to track the page view
+    setTimeout(() => {
+      refreshBehaviorData();
+      const data = (window as any).HappyLead?.getBehaviorData();
+      const count = data?.pageViews?.['/pricing'] || 0;
+      console.log(`[Flowtide] Pricing visits: ${count}/2`);
+    }, 100);
+  };
+
+  const triggerExitIntent = () => {
+    // Simulate exit intent
+    const event = new MouseEvent('mouseleave', {
+      clientY: -10,
+      bubbles: true
+    });
+    document.dispatchEvent(event);
+    console.log('[Flowtide] Exit intent triggered');
+  };
+
+  const add30Seconds = () => {
+    const data = (window as any).HappyLead?.getBehaviorData();
+    if (data) {
+      const currentPage = window.location.pathname;
+      if (!data.timeOnPage[currentPage]) {
+        data.timeOnPage[currentPage] = 0;
+      }
+      data.timeOnPage[currentPage] += 30;
+      refreshBehaviorData();
+      console.log(`[Flowtide] Added 30s to ${currentPage}. Total: ${data.timeOnPage[currentPage]}s`);
+    }
+  };
+
+  const resetBehavior = () => {
+    if (confirm('Reset all behavior data and reload?')) {
+      localStorage.clear();
+      window.location.reload();
     }
   };
 
@@ -62,56 +122,136 @@ const Index = () => {
                 Test HappyLead Triggers
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
-              <DropdownMenuLabel>Trigger Flows</DropdownMenuLabel>
+            <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                🧪 PLAYBOOK TRIGGERS (NEW)
+              </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              
+
+              <DropdownMenuItem onClick={simulatePricingVisit}>
+                <DollarSign className="mr-2 h-4 w-4" />
+                <div className="flex flex-col">
+                  <span>Visit Pricing Page</span>
+                  <span className="text-xs text-muted-foreground">Click 2x to trigger</span>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={triggerExitIntent}>
+                <MousePointer className="mr-2 h-4 w-4" />
+                <div className="flex flex-col">
+                  <span>Trigger Exit Intent</span>
+                  <span className="text-xs text-muted-foreground">Fires immediately</span>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={add30Seconds}>
+                <Clock className="mr-2 h-4 w-4" />
+                <div className="flex flex-col">
+                  <span>Add 30 Seconds</span>
+                  <span className="text-xs text-muted-foreground">Simulate time on page</span>
+                </div>
+              </DropdownMenuItem>
+
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                LEGACY TRIGGERS
+              </DropdownMenuLabel>
+
               <DropdownMenuItem onClick={() => triggerFlow('stuck', { page: '/checkout', timeOnPage: 45 })}>
                 <Wrench className="mr-2 h-4 w-4" />
                 Stuck on Pricing
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem onClick={() => triggerFlow('aha', { milestone: 'first_integration', value: 'Salesforce' })}>
                 <Sparkles className="mr-2 h-4 w-4" />
                 Aha Moment
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem onClick={() => triggerFlow('wrong_deployment', { type: 'serverless', useCase: 'recommendation_system' })}>
                 <AlertTriangle className="mr-2 h-4 w-4" />
                 Wrong Deployment
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem onClick={() => triggerFlow('first_query', { queryCount: 1, vectorCount: 10000 })}>
                 <Search className="mr-2 h-4 w-4" />
                 First Query
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem onClick={() => triggerFlow('spend_alert', { amount: 500, period: '2_days' })}>
                 <DollarSign className="mr-2 h-4 w-4" />
                 High Spend Alert
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem onClick={() => triggerFlow('high_value_signup', { company: 'Nike', employeeCount: 75000 })}>
                 <Star className="mr-2 h-4 w-4" />
                 High-Value Signup
               </DropdownMenuItem>
-              
+
               <DropdownMenuSeparator />
-              <DropdownMenuLabel>Testing Tools</DropdownMenuLabel>
-              
+              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
+                TESTING TOOLS
+              </DropdownMenuLabel>
+
               <DropdownMenuItem onClick={() => trackEvent('clicked_pricing', { plan: 'enterprise' })}>
                 <Activity className="mr-2 h-4 w-4" />
                 Track Custom Event
               </DropdownMenuItem>
-              
+
               <DropdownMenuItem onClick={viewBehaviorData}>
                 <Eye className="mr-2 h-4 w-4" />
                 View Behavior Data
               </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={resetBehavior} className="text-destructive">
+                <LogOut className="mr-2 h-4 w-4" />
+                Reset & Reload
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        
+
+        {/* Debug Panel */}
+        {showDebug && behaviorData && (
+          <div className="mb-6 rounded-lg border bg-card p-4 shadow-sm">
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-semibold">Behavior Data</h3>
+              <Button size="sm" variant="ghost" onClick={() => setShowDebug(false)}>
+                ✕
+              </Button>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div>
+                <div className="mb-1 font-medium text-muted-foreground">Page Views:</div>
+                <pre className="rounded bg-muted p-2 text-xs">
+                  {JSON.stringify(behaviorData.pageViews, null, 2)}
+                </pre>
+              </div>
+
+              <div>
+                <div className="mb-1 font-medium text-muted-foreground">Time on Page:</div>
+                <pre className="rounded bg-muted p-2 text-xs">
+                  {JSON.stringify(behaviorData.timeOnPage, null, 2)}
+                </pre>
+              </div>
+
+              <div>
+                <div className="mb-1 font-medium text-muted-foreground">Exit Intent:</div>
+                <span className={behaviorData.exitIntentDetected ? 'text-green-600' : 'text-muted-foreground'}>
+                  {behaviorData.exitIntentDetected ? '✓ Detected' : '✗ Not detected'}
+                </span>
+              </div>
+
+              <div>
+                <div className="mb-1 font-medium text-muted-foreground">Session Start:</div>
+                <span className="text-muted-foreground">
+                  {new Date(behaviorData.sessionStart).toLocaleTimeString()}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <DemoBuilder />
       </Layout>
     </>
