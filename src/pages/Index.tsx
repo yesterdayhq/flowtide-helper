@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MessageCircle, Wrench, Sparkles, AlertTriangle, Search, DollarSign, Star, Activity, Eye, Clock, MousePointer, LogOut, RotateCcw } from 'lucide-react';
+import { MessageCircle, Activity, Eye, Clock, MousePointer, LogOut, RotateCcw, DollarSign } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const Index = () => {
@@ -34,14 +34,6 @@ const Index = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const triggerFlow = (flowName: string, context?: any) => {
-    if ((window as any).HappyLead) {
-      (window as any).HappyLead.trigger(flowName, context);
-      console.log(`[Flowtide] Triggered: ${flowName}`, context);
-    } else {
-      alert('HappyLead widget not loaded yet!');
-    }
-  };
 
   const trackEvent = (eventName: string, properties?: any) => {
     if ((window as any).HappyLead) {
@@ -239,40 +231,7 @@ const Index = () => {
                 </div>
               </DropdownMenuItem>
 
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
-                LEGACY TRIGGERS
-              </DropdownMenuLabel>
 
-              <DropdownMenuItem onClick={() => triggerFlow('stuck', { page: '/checkout', timeOnPage: 45 })}>
-                <Wrench className="mr-2 h-4 w-4" />
-                Stuck on Pricing
-              </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => triggerFlow('aha', { milestone: 'first_integration', value: 'Salesforce' })}>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Aha Moment
-              </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => triggerFlow('wrong_deployment', { type: 'serverless', useCase: 'recommendation_system' })}>
-                <AlertTriangle className="mr-2 h-4 w-4" />
-                Wrong Deployment
-              </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => triggerFlow('first_query', { queryCount: 1, vectorCount: 10000 })}>
-                <Search className="mr-2 h-4 w-4" />
-                First Query
-              </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => triggerFlow('spend_alert', { amount: 500, period: '2_days' })}>
-                <DollarSign className="mr-2 h-4 w-4" />
-                High Spend Alert
-              </DropdownMenuItem>
-
-              <DropdownMenuItem onClick={() => triggerFlow('high_value_signup', { company: 'Nike', employeeCount: 75000 })}>
-                <Star className="mr-2 h-4 w-4" />
-                High-Value Signup
-              </DropdownMenuItem>
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
