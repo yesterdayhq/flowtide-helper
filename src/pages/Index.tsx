@@ -10,17 +10,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MessageCircle, Wrench, Sparkles, AlertTriangle, Search, DollarSign, Star, Activity, Eye, Clock, MousePointer, LogOut } from 'lucide-react';
+import { MessageCircle, Wrench, Sparkles, AlertTriangle, Search, DollarSign, Star, Activity, Eye, Clock, MousePointer, LogOut, RotateCcw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const Index = () => {
   const [behaviorData, setBehaviorData] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
+  const [pricingVisits, setPricingVisits] = useState(0);
 
   // Refresh behavior data
   const refreshBehaviorData = () => {
     if ((window as any).HappyLead) {
-      setBehaviorData((window as any).HappyLead.getBehaviorData());
+      const data = (window as any).HappyLead.getBehaviorData();
+      setBehaviorData(data);
+      // Update pricing visits counter
+      setPricingVisits(data?.pageViews?.['/pricing'] || 0);
     }
   };
 
@@ -53,7 +57,7 @@ const Index = () => {
 
   // Playbook testing functions
   const simulatePricingVisit = () => {
-    // Simulate navigation to pricing page
+    // Navigate to pricing page
     window.history.pushState({}, '', '/pricing');
 
     // Give widget time to track the page view
@@ -62,6 +66,12 @@ const Index = () => {
       const data = (window as any).HappyLead?.getBehaviorData();
       const count = data?.pageViews?.['/pricing'] || 0;
       console.log(`[Flowtide] Pricing visits: ${count}/3 (need 3 to trigger)`);
+
+      // Navigate back to home after a brief moment
+      setTimeout(() => {
+        window.history.pushState({}, '', '/');
+        console.log('[Flowtide] Returned to home page');
+      }, 500);
     }, 100);
   };
 
@@ -120,8 +130,41 @@ const Index = () => {
   };
 
   const resetBehavior = () => {
-    if (confirm('Reset all behavior data and reload?')) {
+    if (confirm('Reset all behavior data? This will clear page visits, time tracking, and exit intent data.')) {
+      // Clear HappyLead data
+      if ((window as any).HappyLead) {
+        const data = (window as any).HappyLead.getBehaviorData();
+        if (data) {
+          data.pageViews = {};
+          data.timeOnPage = {};
+          data.exitIntentDetected = false;
+          data.sessionStart = Date.now();
+        }
+      }
+
+      // Clear any localStorage related to HappyLead
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('happylead_') || key.startsWith('hl_')) {
+          localStorage.removeItem(key);
+        }
+      });
+
+      // Reset UI state
+      setPricingVisits(0);
+      refreshBehaviorData();
+
+      // Navigate back to home
+      window.history.pushState({}, '', '/');
+
+      console.log('[Flowtide] Behavior data reset');
+      alert('✓ Behavior data has been reset!');
+    }
+  };
+
+  const resetAll = () => {
+    if (confirm('Reset EVERYTHING and reload? This will clear all data and refresh the page.')) {
       localStorage.clear();
+      sessionStorage.clear();
       window.location.reload();
     }
   };
@@ -146,6 +189,17 @@ const Index = () => {
       <Layout>
         {/* Test Triggers Dropdown */}
         <div className="mb-4 flex justify-end gap-2">
+          {/* Quick Reset Button */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetBehavior}
+            className="gap-2 text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+          >
+            <RotateCcw className="h-4 w-4" />
+            Reset Behavior
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
@@ -161,9 +215,11 @@ const Index = () => {
 
               <DropdownMenuItem onClick={simulatePricingVisit}>
                 <DollarSign className="mr-2 h-4 w-4" />
-                <div className="flex flex-col">
+                <div className="flex flex-col flex-1">
                   <span>Visit Pricing Page</span>
-                  <span className="text-xs text-muted-foreground">Click 3x to trigger playbook</span>
+                  <span className="text-xs text-muted-foreground">
+                    {pricingVisits}/3 visits • Triggers at 3
+                  </span>
                 </div>
               </DropdownMenuItem>
 
@@ -233,9 +289,14 @@ const Index = () => {
                 View Behavior Data
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={resetBehavior} className="text-destructive">
+              <DropdownMenuItem onClick={resetBehavior} className="text-orange-600">
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Reset Behavior Data
+              </DropdownMenuItem>
+
+              <DropdownMenuItem onClick={resetAll} className="text-destructive">
                 <LogOut className="mr-2 h-4 w-4" />
-                Reset & Reload
+                Reset All & Reload
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
