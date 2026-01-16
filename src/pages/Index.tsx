@@ -17,14 +17,15 @@ const Index = () => {
   const [behaviorData, setBehaviorData] = useState<any>(null);
   const [showDebug, setShowDebug] = useState(false);
   const [pricingVisits, setPricingVisits] = useState(0);
+  const [dashboardTime, setDashboardTime] = useState(0);
 
   // Refresh behavior data
   const refreshBehaviorData = () => {
     if ((window as any).HappyLead) {
       const data = (window as any).HappyLead.getBehaviorData();
       setBehaviorData(data);
-      // Update pricing visits counter
       setPricingVisits(data?.pageViews?.['/pricing'] || 0);
+      setDashboardTime(data?.timeOnPage?.['/dashboard'] || 0);
     }
   };
 
@@ -33,7 +34,6 @@ const Index = () => {
     const interval = setInterval(refreshBehaviorData, 2000);
     return () => clearInterval(interval);
   }, []);
-
 
   const trackEvent = (eventName: string, properties?: any) => {
     if ((window as any).HappyLead) {
@@ -57,7 +57,7 @@ const Index = () => {
       refreshBehaviorData();
       const data = (window as any).HappyLead?.getBehaviorData();
       const count = data?.pageViews?.['/pricing'] || 0;
-      console.log(`[Flowtide] Pricing visits: ${count}/3 (need 3 to trigger)`);
+      console.log(`[Flowtide] Pricing page visited. Total visits: ${count}`);
 
       // Navigate back to home after a brief moment
       setTimeout(() => {
@@ -94,30 +94,7 @@ const Index = () => {
       }
       data.timeOnPage['/dashboard'] += 60;
       refreshBehaviorData();
-      console.log(`[Flowtide] Dashboard time: ${data.timeOnPage['/dashboard']}s (need 60s to trigger)`);
-    }
-  };
-
-  const triggerExitIntent = () => {
-    // Simulate exit intent
-    const event = new MouseEvent('mouseleave', {
-      clientY: -10,
-      bubbles: true
-    });
-    document.dispatchEvent(event);
-    console.log('[Flowtide] Exit intent triggered');
-  };
-
-  const add30Seconds = () => {
-    const data = (window as any).HappyLead?.getBehaviorData();
-    if (data) {
-      const currentPage = window.location.pathname;
-      if (!data.timeOnPage[currentPage]) {
-        data.timeOnPage[currentPage] = 0;
-      }
-      data.timeOnPage[currentPage] += 30;
-      refreshBehaviorData();
-      console.log(`[Flowtide] Added 30s to ${currentPage}. Total: ${data.timeOnPage[currentPage]}s`);
+      console.log(`[Flowtide] Added 60s to dashboard. Total time: ${data.timeOnPage['/dashboard']}s`);
     }
   };
 
@@ -143,6 +120,7 @@ const Index = () => {
 
       // Reset UI state
       setPricingVisits(0);
+      setDashboardTime(0);
       refreshBehaviorData();
 
       // Navigate back to home
@@ -196,12 +174,12 @@ const Index = () => {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <MessageCircle className="h-4 w-4" />
-                Test HappyLead Triggers
+                Simulate Behavior
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
-                🧪 PLAYBOOK TRIGGERS (NEW)
+                🎯 SIMULATE VISITOR ACTIONS
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
 
@@ -210,7 +188,7 @@ const Index = () => {
                 <div className="flex flex-col flex-1">
                   <span>Visit Pricing Page</span>
                   <span className="text-xs text-muted-foreground">
-                    {pricingVisits}/3 visits • Triggers at 3
+                    Current: {pricingVisits} visit{pricingVisits !== 1 ? 's' : ''}
                   </span>
                 </div>
               </DropdownMenuItem>
@@ -219,23 +197,23 @@ const Index = () => {
                 <MousePointer className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
                   <span>Exit Intent on Checkout</span>
-                  <span className="text-xs text-muted-foreground">Triggers immediately</span>
+                  <span className="text-xs text-muted-foreground">Mouse leaves page</span>
                 </div>
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={simulateDashboardTime}>
                 <Clock className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span>60s on Dashboard</span>
-                  <span className="text-xs text-muted-foreground">Adds 60s to dashboard page</span>
+                  <span>Spend 60s on Dashboard</span>
+                  <span className="text-xs text-muted-foreground">
+                    Current: {dashboardTime}s
+                  </span>
                 </div>
               </DropdownMenuItem>
 
-
-
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
-                TESTING TOOLS
+                🔧 TESTING TOOLS
               </DropdownMenuLabel>
 
               <DropdownMenuItem onClick={() => trackEvent('clicked_pricing', { plan: 'enterprise' })}>
