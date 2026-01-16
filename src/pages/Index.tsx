@@ -61,8 +61,39 @@ const Index = () => {
       refreshBehaviorData();
       const data = (window as any).HappyLead?.getBehaviorData();
       const count = data?.pageViews?.['/pricing'] || 0;
-      console.log(`[Flowtide] Pricing visits: ${count}/2`);
+      console.log(`[Flowtide] Pricing visits: ${count}/3 (need 3 to trigger)`);
     }, 100);
+  };
+
+  const simulateCheckoutExit = () => {
+    // Navigate to checkout page first
+    window.history.pushState({}, '', '/checkout');
+
+    // Wait a moment, then trigger exit intent
+    setTimeout(() => {
+      const event = new MouseEvent('mouseleave', {
+        clientY: -10,
+        bubbles: true
+      });
+      document.dispatchEvent(event);
+      console.log('[Flowtide] Exit intent triggered on /checkout');
+    }, 200);
+  };
+
+  const simulateDashboardTime = () => {
+    // Navigate to dashboard
+    window.history.pushState({}, '', '/dashboard');
+
+    const data = (window as any).HappyLead?.getBehaviorData();
+    if (data) {
+      // Add 60 seconds to dashboard
+      if (!data.timeOnPage['/dashboard']) {
+        data.timeOnPage['/dashboard'] = 0;
+      }
+      data.timeOnPage['/dashboard'] += 60;
+      refreshBehaviorData();
+      console.log(`[Flowtide] Dashboard time: ${data.timeOnPage['/dashboard']}s (need 60s to trigger)`);
+    }
   };
 
   const triggerExitIntent = () => {
@@ -132,23 +163,23 @@ const Index = () => {
                 <DollarSign className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
                   <span>Visit Pricing Page</span>
-                  <span className="text-xs text-muted-foreground">Click 2x to trigger</span>
+                  <span className="text-xs text-muted-foreground">Click 3x to trigger playbook</span>
                 </div>
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={triggerExitIntent}>
+              <DropdownMenuItem onClick={simulateCheckoutExit}>
                 <MousePointer className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span>Trigger Exit Intent</span>
-                  <span className="text-xs text-muted-foreground">Fires immediately</span>
+                  <span>Exit Intent on Checkout</span>
+                  <span className="text-xs text-muted-foreground">Triggers immediately</span>
                 </div>
               </DropdownMenuItem>
 
-              <DropdownMenuItem onClick={add30Seconds}>
+              <DropdownMenuItem onClick={simulateDashboardTime}>
                 <Clock className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span>Add 30 Seconds</span>
-                  <span className="text-xs text-muted-foreground">Simulate time on page</span>
+                  <span>60s on Dashboard</span>
+                  <span className="text-xs text-muted-foreground">Adds 60s to dashboard page</span>
                 </div>
               </DropdownMenuItem>
 
