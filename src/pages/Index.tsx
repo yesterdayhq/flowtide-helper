@@ -83,19 +83,15 @@ const Index = () => {
   };
 
   const simulateDashboardTime = () => {
-    // Navigate to dashboard
+    // Navigate to dashboard and stay there
     window.history.pushState({}, '', '/dashboard');
 
-    const data = (window as any).HappyLead?.getBehaviorData();
-    if (data) {
-      // Add 60 seconds to dashboard
-      if (!data.timeOnPage['/dashboard']) {
-        data.timeOnPage['/dashboard'] = 0;
-      }
-      data.timeOnPage['/dashboard'] += 60;
-      refreshBehaviorData();
-      console.log(`[Flowtide] Added 60s to dashboard. Total time: ${data.timeOnPage['/dashboard']}s`);
-    }
+    // Trigger page view tracking
+    const event = new Event('popstate');
+    window.dispatchEvent(event);
+
+    console.log('[Flowtide] Navigated to dashboard - time tracking started');
+    refreshBehaviorData();
   };
 
   const resetBehavior = () => {
