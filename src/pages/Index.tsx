@@ -2,6 +2,16 @@ import { Helmet } from 'react-helmet-async';
 import { Layout } from '@/components/Layout';
 import { DemoBuilder } from '@/components/DemoBuilder/DemoBuilder';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,7 +20,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { MessageCircle, Activity, Eye, Clock, MousePointer, LogOut, RotateCcw, DollarSign } from 'lucide-react';
+import { MessageCircle, Activity, Eye, Clock, MousePointer, LogOut, RotateCcw, DollarSign, LogIn, User } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const Index = () => {
@@ -18,6 +28,68 @@ const Index = () => {
   const [showDebug, setShowDebug] = useState(false);
   const [pricingVisits, setPricingVisits] = useState(0);
   const [dashboardTime, setDashboardTime] = useState(0);
+
+  // Login simulator state
+  const [showLoginSim, setShowLoginSim] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('allen.martin@feve.com');
+  const [loginName, setLoginName] = useState('Allen Martin');
+  const [loginCompany, setLoginCompany] = useState('Feve');
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  // Check if already "logged in"
+  useEffect(() => {
+    const currentUser = (window as any).currentUser;
+    if (currentUser?.email) {
+      setIsLoggedIn(true);
+      setLoginEmail(currentUser.email);
+      setLoginName(currentUser.name || '');
+      setLoginCompany(currentUser.company || '');
+    }
+  }, []);
+
+  // Simulate login
+  const simulateLogin = () => {
+    // Set global user (like a real app would)
+    (window as any).currentUser = {
+      email: loginEmail,
+      name: loginName,
+      company: loginCompany
+    };
+
+    // Call HappyLead.identify manually (in case auto-detection didn't work)
+    if ((window as any).HappyLead) {
+      (window as any).HappyLead.identify(loginEmail, {
+        email: loginEmail,
+        name: loginName,
+        company: loginCompany
+      });
+      console.log('[Flowtide] ✅ Simulated login:', loginEmail);
+      console.log('[Flowtide] HappyLead.identify() called');
+    } else {
+      console.warn('[Flowtide] ⚠️ HappyLead not loaded yet');
+    }
+
+    setIsLoggedIn(true);
+    setShowLoginSim(false);
+
+    alert(`✓ Logged in as ${loginName}\n\n${loginEmail}\n\nHappyLead should now detect you!\n\nCheck the browser console for confirmation.`);
+  };
+
+  // Simulate logout
+  const simulateLogout = () => {
+    (window as any).currentUser = null;
+    setIsLoggedIn(false);
+    setLoginEmail('');
+    setLoginName('');
+    setLoginCompany('');
+    console.log('[Flowtide] Simulated logout - now anonymous');
+    alert('✓ Logged out! You are now anonymous to HappyLead.');
+
+    // Reload to reset widget
+    if (confirm('Reload page to fully reset HappyLead?')) {
+      window.location.reload();
+    }
+  };
 
   // Refresh behavior data
   const refreshBehaviorData = () => {
@@ -49,17 +121,12 @@ const Index = () => {
 
   // Playbook testing functions
   const simulatePricingVisit = () => {
-    // Navigate to pricing page
     window.history.pushState({}, '', '/pricing');
-
-    // Give widget time to track the page view
     setTimeout(() => {
       refreshBehaviorData();
       const data = (window as any).HappyLead?.getBehaviorData();
       const count = data?.pageViews?.['/pricing'] || 0;
       console.log(`[Flowtide] Pricing page visited. Total visits: ${count}`);
-
-      // Navigate back to home after a brief moment
       setTimeout(() => {
         window.history.pushState({}, '', '/');
         console.log('[Flowtide] Returned to home page');
@@ -68,10 +135,7 @@ const Index = () => {
   };
 
   const simulateCheckoutExit = () => {
-    // Navigate to checkout page first
     window.history.pushState({}, '', '/checkout');
-
-    // Wait a moment, then trigger exit intent
     setTimeout(() => {
       const event = new MouseEvent('mouseleave', {
         clientY: -10,
@@ -83,20 +147,15 @@ const Index = () => {
   };
 
   const simulateDashboardTime = () => {
-    // Navigate to dashboard and stay there
     window.history.pushState({}, '', '/dashboard');
-
-    // Trigger page view tracking
     const event = new Event('popstate');
     window.dispatchEvent(event);
-
     console.log('[Flowtide] Navigated to dashboard - time tracking started');
     refreshBehaviorData();
   };
 
   const resetBehavior = () => {
     if (confirm('Reset all behavior data? This will clear page visits, time tracking, and exit intent data.')) {
-      // Clear HappyLead data
       if ((window as any).HappyLead) {
         const data = (window as any).HappyLead.getBehaviorData();
         if (data) {
@@ -106,22 +165,15 @@ const Index = () => {
           data.sessionStart = Date.now();
         }
       }
-
-      // Clear any localStorage related to HappyLead
       Object.keys(localStorage).forEach(key => {
         if (key.startsWith('happylead_') || key.startsWith('hl_')) {
           localStorage.removeItem(key);
         }
       });
-
-      // Reset UI state
       setPricingVisits(0);
       setDashboardTime(0);
       refreshBehaviorData();
-
-      // Navigate back to home
       window.history.pushState({}, '', '/');
-
       console.log('[Flowtide] Behavior data reset');
       alert('✓ Behavior data has been reset!');
     }
@@ -138,13 +190,12 @@ const Index = () => {
   return (
     <>
       <Helmet>
-        <title>Flowtide - Create Interactive Product Demos</title>
+        <title>Flowtide - HappyLead Testing Environment</title>
         <meta
           name="description"
-          content="Build beautiful, interactive product demos in minutes. Record screens, add annotations, and share with your team."
+          content="Test environment for HappyLead widget integration"
         />
         <style>{`
-          /* Hide Lovable edit button */
           [data-lovable-edit-button],
           .lovable-edit-button,
           a[href*="lovable.dev"] {
@@ -153,9 +204,99 @@ const Index = () => {
         `}</style>
       </Helmet>
       <Layout>
+        {/* User Status Bar */}
+        <div className="mb-4 flex items-center justify-between rounded-lg border bg-card p-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <User className="h-5 w-5 text-muted-foreground" />
+            <div>
+              <div className="font-medium">
+                {isLoggedIn ? (
+                  <span className="text-green-600">✓ Logged In: {loginName}</span>
+                ) : (
+                  <span className="text-muted-foreground">Anonymous User</span>
+                )}
+              </div>
+              {isLoggedIn && (
+                <div className="text-xs text-muted-foreground">{loginEmail}</div>
+              )}
+            </div>
+          </div>
+
+          <div className="flex gap-2">
+            {isLoggedIn ? (
+              <Button variant="outline" size="sm" onClick={simulateLogout} className="gap-2">
+                <LogOut className="h-4 w-4" />
+                Logout
+              </Button>
+            ) : (
+              <Dialog open={showLoginSim} onOpenChange={setShowLoginSim}>
+                <DialogTrigger asChild>
+                  <Button size="sm" className="gap-2">
+                    <LogIn className="h-4 w-4" />
+                    Simulate Login
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Simulate User Login</DialogTitle>
+                    <DialogDescription>
+                      This simulates a user logging into your app. HappyLead will detect these credentials.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <div className="space-y-4 py-4">
+                    <div>
+                      <Label htmlFor="email">Email *</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={loginEmail}
+                        onChange={(e) => setLoginEmail(e.target.value)}
+                        placeholder="user@company.com"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="name">Name</Label>
+                      <Input
+                        id="name"
+                        value={loginName}
+                        onChange={(e) => setLoginName(e.target.value)}
+                        placeholder="John Smith"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="company">Company</Label>
+                      <Input
+                        id="company"
+                        value={loginCompany}
+                        onChange={(e) => setLoginCompany(e.target.value)}
+                        placeholder="Acme Corp"
+                      />
+                    </div>
+
+                    <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
+                      <strong>What this does:</strong>
+                      <ul className="mt-1 ml-4 list-disc text-xs">
+                        <li>Sets window.currentUser (simulating your app)</li>
+                        <li>Calls HappyLead.identify()</li>
+                        <li>Widget should detect you immediately</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <Button onClick={simulateLogin} disabled={!loginEmail}>
+                    Login as This User
+                  </Button>
+                </DialogContent>
+              </Dialog>
+            )}
+          </div>
+        </div>
+
         {/* Test Triggers Dropdown */}
         <div className="mb-4 flex justify-end gap-2">
-          {/* Quick Reset Button */}
           <Button
             variant="outline"
             size="sm"
