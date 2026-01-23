@@ -17,8 +17,9 @@
     <meta name="twitter:description" content="Build beautiful, interactive product demos in minutes." />
 
     <!-- HappyLead Widget -->
-<script src="https://happylead-mvp.vercel.app/widget.js" data-account-id="8c175179-8972-415e-a07f-1614786e558c"></script>  </head>
-
+<script>
+!function(){var u=window.currentUser||window.user||(window.analytics&&window.analytics.user&&window.analytics.user())||(window.Intercom&&window.Intercom.user)||null;window.HappyLeadConfig={accountId:"8c175179-8972-415e-a07f-1614786e558c",user:u&&u.email?{email:u.email,name:u.name||u.full_name||u.firstName+" "+u.lastName,company:u.company||u.companyName}:null};var s=document.createElement("script");s.src="https://happylead-mvp.vercel.app/widget.js";document.head.appendChild(s)}();
+</script>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
