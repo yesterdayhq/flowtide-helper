@@ -36,6 +36,29 @@ const Index = () => {
   const [loginCompany, setLoginCompany] = useState('Feve');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
+  // Load HappyLead widget
+  useEffect(() => {
+    const loadWidget = () => {
+      const u = (window as any).currentUser || (window as any).user || null;
+      (window as any).HappyLeadConfig = {
+        accountId: "8c175179-8972-415e-a07f-1614786e558c",
+        user: u && u.email ? {
+          email: u.email,
+          name: u.name || u.full_name || (u.firstName + " " + u.lastName),
+          company: u.company || u.companyName
+        } : null
+      };
+
+      const script = document.createElement("script");
+      script.src = "https://happylead-mvp.vercel.app/widget.js";
+      script.async = true;
+      script.setAttribute('data-account-id', '8c175179-8972-415e-a07f-1614786e558c');
+      document.head.appendChild(script);
+    };
+
+    loadWidget();
+  }, []);
+
   // Check if already "logged in"
   useEffect(() => {
     const currentUser = (window as any).currentUser;
@@ -246,7 +269,7 @@ const Index = () => {
 
                   <div className="space-y-4 py-4">
                     <div>
-                      <Label htmlFor="email">Email *</Label>
+                      <Label htmlFor="email">Email * (Required)</Label>
                       <Input
                         id="email"
                         type="email"
@@ -254,34 +277,45 @@ const Index = () => {
                         onChange={(e) => setLoginEmail(e.target.value)}
                         placeholder="user@company.com"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        This is what HappyLead uses to look you up in Salesforce
+                      </p>
                     </div>
 
                     <div>
-                      <Label htmlFor="name">Name</Label>
+                      <Label htmlFor="name">Name (Optional)</Label>
                       <Input
                         id="name"
                         value={loginName}
                         onChange={(e) => setLoginName(e.target.value)}
                         placeholder="John Smith"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        For personalization only (e.g., "Hi John!")
+                      </p>
                     </div>
 
                     <div>
-                      <Label htmlFor="company">Company</Label>
+                      <Label htmlFor="company">Company (Optional)</Label>
                       <Input
                         id="company"
                         value={loginCompany}
                         onChange={(e) => setLoginCompany(e.target.value)}
                         placeholder="Acme Corp"
                       />
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        For display only - Salesforce has the real data
+                      </p>
                     </div>
 
                     <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
-                      <strong>What this does:</strong>
-                      <ul className="mt-1 ml-4 list-disc text-xs">
+                      <strong>What happens:</strong>
+                      <ul className="mt-1 ml-4 list-disc text-xs space-y-1">
                         <li>Sets window.currentUser (simulating your app)</li>
-                        <li>Calls HappyLead.identify()</li>
-                        <li>Widget should detect you immediately</li>
+                        <li>Calls HappyLead.identify() with email</li>
+                        <li>Widget looks up email in Salesforce</li>
+                        <li>Gets company size, industry, trial status, etc.</li>
+                        <li>Matches against playbook rules</li>
                       </ul>
                     </div>
                   </div>
