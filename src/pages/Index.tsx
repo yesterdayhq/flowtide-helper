@@ -39,13 +39,13 @@ const Index = () => {
   // Load HappyLead widget
   useEffect(() => {
     const loadWidget = () => {
-      const u = (window as any).currentUser || (window as any).user || null;
+      const u = (window as any).currentUser || (window as any).user || ((window as any).analytics?.user?.()) || ((window as any).Intercom?.user) || null;
       (window as any).HappyLeadConfig = {
         accountId: "8c175179-8972-415e-a07f-1614786e558c",
-        user: u && u.email ? {
+        user: u?.email ? {
           email: u.email,
-          name: u.name || u.full_name || (u.firstName + " " + u.lastName),
-          company: u.company || u.companyName
+          name: u.name || u.full_name || (u.firstName && u.lastName ? u.firstName + " " + u.lastName : "") || "",
+          company: u.company || u.companyName || ""
         } : null
       };
 
@@ -58,6 +58,7 @@ const Index = () => {
 
     loadWidget();
   }, []);
+
 
   // Check if already "logged in"
   useEffect(() => {
