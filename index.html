@@ -16,20 +16,6 @@
     <meta name="twitter:title" content="Flowtide - Create Interactive Product Demos" />
     <meta name="twitter:description" content="Build beautiful, interactive product demos in minutes." />
 
-    <!-- HappyLead Widget -->
-<script>
-window.addEventListener('DOMContentLoaded', function() {
-  var u=window.currentUser||window.user||(window.analytics&&window.analytics.user&&window.analytics.user())||(window.Intercom&&window.Intercom.user)||null;
-  window.HappyLeadConfig={
-    accountId:"8c175179-8972-415e-a07f-1614786e558c",
-    user:u&&u.email?{email:u.email,name:u.name||u.full_name||u.firstName+" "+u.lastName,company:u.company||u.companyName}:null
-  };
-  var s=document.createElement("script");
-  s.src="https://happylead-mvp.vercel.app/widget.js";
-  s.async = true; // ✅ Load async
-  s.setAttribute('data-account-id', '8c175179-8972-415e-a07f-1614786e558c');
-  document.head.appendChild(s);
-});
-</script>
+
   </body>
 </html>
