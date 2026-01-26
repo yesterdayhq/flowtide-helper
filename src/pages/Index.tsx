@@ -81,17 +81,16 @@ const Index = () => {
     };
 
     // Call HappyLead.identify manually (in case auto-detection didn't work)
-    if ((window as any).HappyLead) {
-      (window as any).HappyLead.identify(loginEmail, {
-        email: loginEmail,
-        name: loginName,
-        company: loginCompany
-      });
-      console.log('[Flowtide] ✅ Simulated login:', loginEmail);
-      console.log('[Flowtide] HappyLead.identify() called');
-    } else {
-      console.warn('[Flowtide] ⚠️ HappyLead not loaded yet');
-    }
+if ((window as any).HappyLead) {
+  (window as any).HappyLead.identify(loginEmail, {
+    email: loginEmail,
+    name: loginName,
+    company: loginCompany
+  });
+  // Removed console logs - use HappyLead.isUserIdentified() to verify instead
+} else {
+  console.warn('[Flowtide] ⚠️ HappyLead not loaded yet');
+}
 
     setIsLoggedIn(true);
     setShowLoginSim(false);
@@ -101,13 +100,12 @@ const Index = () => {
 
   // Simulate logout
   const simulateLogout = () => {
-    (window as any).currentUser = null;
-    setIsLoggedIn(false);
-    setLoginEmail('');
-    setLoginName('');
-    setLoginCompany('');
-    console.log('[Flowtide] Simulated logout - now anonymous');
-    alert('✓ Logged out! You are now anonymous to HappyLead.');
+  (window as any).currentUser = null;
+  setIsLoggedIn(false);
+  setLoginEmail('');
+  setLoginName('');
+  setLoginCompany('');
+  alert('✓ Logged out! You are now anonymous to HappyLead.');
 
     // Reload to reset widget
     if (confirm('Reload page to fully reset HappyLead?')) {
