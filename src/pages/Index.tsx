@@ -32,8 +32,8 @@ const Index = () => {
   // Login simulator state
   const [showLoginSim, setShowLoginSim] = useState(false);
   const [loginEmail, setLoginEmail] = useState('allen.martin@feve.com');
-  const [loginName, setLoginName] = useState('Allen Martin');
-  const [loginCompany, setLoginCompany] = useState('Feve');
+  const [loginName, setLoginName] = useState('');
+  const [loginCompany, setLoginCompany] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   // Load HappyLead widget
