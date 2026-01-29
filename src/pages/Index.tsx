@@ -36,28 +36,7 @@ const Index = () => {
   const [loginCompany, setLoginCompany] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Load HappyLead widget
-  useEffect(() => {
-    const loadWidget = () => {
-      const u = (window as any).currentUser || (window as any).user || ((window as any).analytics?.user?.()) || ((window as any).Intercom?.user) || null;
-      (window as any).HappyLeadConfig = {
-        accountId: "8c175179-8972-415e-a07f-1614786e558c",
-        user: u?.email ? {
-          email: u.email,
-          name: u.name || u.full_name || (u.firstName && u.lastName ? u.firstName + " " + u.lastName : "") || "",
-          company: u.company || u.companyName || ""
-        } : null
-      };
-
-      const script = document.createElement("script");
-      script.src = "https://app.gethappylead.com/widget.js";
-      script.async = true;
-      script.setAttribute('data-account-id', '8c175179-8972-415e-a07f-1614786e558c');
-      document.head.appendChild(script);
-    };
-
-    loadWidget();
-  }, []);
+  // HappyLead widget is loaded via snippet in <Helmet>
 
 
   // Check if already "logged in"
@@ -212,19 +191,22 @@ if ((window as any).HappyLead) {
   return (
     <>
       <Helmet>
-        <title>Flowtide - HappyLead Testing Environment</title>
-        <meta
-          name="description"
-          content="Test environment for HappyLead widget integration"
-        />
-        <style>{`
-          [data-lovable-edit-button],
-          .lovable-edit-button,
-          a[href*="lovable.dev"] {
-            display: none !important;
-          }
-        `}</style>
-      </Helmet>
+  <title>Flowtide - HappyLead Testing Environment</title>
+  <meta
+    name="description"
+    content="Test environment for HappyLead widget integration"
+  />
+  <script data-account-id="8c175179-8972-415e-a07f-1614786e558c">
+    {`!function(){if(window.HappyLeadWidget?.initialized)return;var u=window.currentUser||window.user||(window.analytics?.user?.())||(window.Intercom?.user)||null;window.HappyLeadConfig={accountId:"8c175179-8972-415e-a07f-1614786e558c",user:u?.email?{email:u.email,name:u.name||u.full_name||(u.firstName&&u.lastName?u.firstName+" "+u.lastName:"")||"",company:u.company||u.companyName||""}:null};var s=document.createElement("script");s.src="https://app.gethappylead.com/widget.js?v="+Date.now();s.async=1;s.setAttribute("data-account-id","8c175179-8972-415e-a07f-1614786e558c");document.head.appendChild(s)}();`}
+  </script>
+  <style>{`
+    [data-lovable-edit-button],
+    .lovable-edit-button,
+    a[href*="lovable.dev"] {
+      display: none !important;
+    }
+  `}</style>
+</Helmet>
       <Layout>
         {/* User Status Bar */}
         <div className="mb-4 flex items-center justify-between rounded-lg border bg-card p-4 shadow-sm">
