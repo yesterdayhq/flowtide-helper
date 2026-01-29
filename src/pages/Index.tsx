@@ -50,7 +50,7 @@ const Index = () => {
       };
 
       const script = document.createElement("script");
-      script.src = "https://happylead-mvp.vercel.app/widget.js";
+      script.src = "https://app.gethappylead.com/widget.js";
       script.async = true;
       script.setAttribute('data-account-id', '8c175179-8972-415e-a07f-1614786e558c');
       document.head.appendChild(script);
