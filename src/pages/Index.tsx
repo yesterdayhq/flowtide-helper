@@ -31,13 +31,10 @@ const Index = () => {
 
   // Login simulator state
   const [showLoginSim, setShowLoginSim] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('allen.martin@feve.com');
+  const [loginEmail, setLoginEmail] = useState('');
   const [loginName, setLoginName] = useState('');
   const [loginCompany, setLoginCompany] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-
-  // HappyLead widget is loaded via snippet in <Helmet>
-
 
   // Check if already "logged in"
   useEffect(() => {
@@ -50,7 +47,7 @@ const Index = () => {
     }
   }, []);
 
-  // Simulate login
+  // Simulate login - just set the global user object, widget does the rest
   const simulateLogin = () => {
     // Set global user (like a real app would)
     (window as any).currentUser = {
@@ -59,40 +56,26 @@ const Index = () => {
       company: loginCompany
     };
 
-    // Call HappyLead.identify manually (in case auto-detection didn't work)
-if ((window as any).HappyLead) {
-  (window as any).HappyLead.identify(loginEmail, {
-    email: loginEmail,
-    name: loginName,
-    company: loginCompany
-  });
-  // Removed console logs - use HappyLead.isUserIdentified() to verify instead
-} else {
-  console.warn('[Flowtide] ⚠️ HappyLead not loaded yet');
-}
-
     setIsLoggedIn(true);
     setShowLoginSim(false);
 
-    alert(`✓ Logged in as ${loginName}\n\n${loginEmail}\n\nHappyLead should now detect you!\n\nCheck the browser console for confirmation.`);
+    // Reload page so widget can detect the user on fresh load
+    window.location.reload();
   };
 
   // Simulate logout
   const simulateLogout = () => {
-  (window as any).currentUser = null;
-  setIsLoggedIn(false);
-  setLoginEmail('');
-  setLoginName('');
-  setLoginCompany('');
-  alert('✓ Logged out! You are now anonymous to HappyLead.');
+    (window as any).currentUser = null;
+    setIsLoggedIn(false);
+    setLoginEmail('');
+    setLoginName('');
+    setLoginCompany('');
 
     // Reload to reset widget
-    if (confirm('Reload page to fully reset HappyLead?')) {
-      window.location.reload();
-    }
+    window.location.reload();
   };
 
-  // Refresh behavior data
+  // Refresh behavior data from widget
   const refreshBehaviorData = () => {
     if ((window as any).HappyLead) {
       const data = (window as any).HappyLead.getBehaviorData();
@@ -108,29 +91,18 @@ if ((window as any).HappyLead) {
     return () => clearInterval(interval);
   }, []);
 
-  const trackEvent = (eventName: string, properties?: any) => {
-    if ((window as any).HappyLead) {
-      (window as any).HappyLead.track(eventName, properties);
-      console.log(`[Flowtide] Tracked: ${eventName}`, properties);
-    }
-  };
-
   const viewBehaviorData = () => {
     refreshBehaviorData();
     setShowDebug(!showDebug);
   };
 
-  // Playbook testing functions
+  // Playbook testing functions - simulate user behavior
   const simulatePricingVisit = () => {
     window.history.pushState({}, '', '/pricing');
     setTimeout(() => {
       refreshBehaviorData();
-      const data = (window as any).HappyLead?.getBehaviorData();
-      const count = data?.pageViews?.['/pricing'] || 0;
-      console.log(`[Flowtide] Pricing page visited. Total visits: ${count}`);
       setTimeout(() => {
         window.history.pushState({}, '', '/');
-        console.log('[Flowtide] Returned to home page');
       }, 500);
     }, 100);
   };
@@ -143,7 +115,6 @@ if ((window as any).HappyLead) {
         bubbles: true
       });
       document.dispatchEvent(event);
-      console.log('[Flowtide] Exit intent triggered on /checkout');
     }, 200);
   };
 
@@ -151,7 +122,6 @@ if ((window as any).HappyLead) {
     window.history.pushState({}, '', '/dashboard');
     const event = new Event('popstate');
     window.dispatchEvent(event);
-    console.log('[Flowtide] Navigated to dashboard - time tracking started');
     refreshBehaviorData();
   };
 
@@ -175,7 +145,6 @@ if ((window as any).HappyLead) {
       setDashboardTime(0);
       refreshBehaviorData();
       window.history.pushState({}, '', '/');
-      console.log('[Flowtide] Behavior data reset');
       alert('✓ Behavior data has been reset!');
     }
   };
@@ -191,22 +160,23 @@ if ((window as any).HappyLead) {
   return (
     <>
       <Helmet>
-  <title>Flowtide - HappyLead Testing Environment</title>
-  <meta
-    name="description"
-    content="Test environment for HappyLead widget integration"
-  />
-  <script data-account-id="8c175179-8972-415e-a07f-1614786e558c">
-    {`!function(){if(window.HappyLeadWidget?.initialized)return;var u=window.currentUser||window.user||(window.analytics?.user?.())||(window.Intercom?.user)||null;window.HappyLeadConfig={accountId:"8c175179-8972-415e-a07f-1614786e558c",user:u?.email?{email:u.email,name:u.name||u.full_name||(u.firstName&&u.lastName?u.firstName+" "+u.lastName:"")||"",company:u.company||u.companyName||""}:null};var s=document.createElement("script");s.src="https://app.gethappylead.com/widget.js?v="+Date.now();s.async=1;s.setAttribute("data-account-id","8c175179-8972-415e-a07f-1614786e558c");document.head.appendChild(s)}();`}
-  </script>
-  <style>{`
-    [data-lovable-edit-button],
-    .lovable-edit-button,
-    a[href*="lovable.dev"] {
-      display: none !important;
-    }
-  `}</style>
-</Helmet>
+        <title>Demo SaaS App - HappyLead Integration</title>
+        <meta
+          name="description"
+          content="Realistic demo environment showing HappyLead widget integration"
+        />
+        {/* HappyLead Widget - Production Snippet */}
+        <script data-account-id="8c175179-8972-415e-a07f-1614786e558c">
+          {`!function(){if(window.HappyLeadWidget?.initialized)return;var u=window.currentUser||window.user||(window.analytics?.user?.())||(window.Intercom?.user)||null;window.HappyLeadConfig={accountId:"8c175179-8972-415e-a07f-1614786e558c",user:u?.email?{email:u.email,name:u.name||u.full_name||(u.firstName&&u.lastName?u.firstName+" "+u.lastName:"")||"",company:u.company||u.companyName||""}:null};var s=document.createElement("script");s.src="https://app.gethappylead.com/widget.js?v="+Date.now();s.async=1;s.setAttribute("data-account-id","8c175179-8972-415e-a07f-1614786e558c");document.head.appendChild(s)}();`}
+        </script>
+        <style>{`
+          [data-lovable-edit-button],
+          .lovable-edit-button,
+          a[href*="lovable.dev"] {
+            display: none !important;
+          }
+        `}</style>
+      </Helmet>
       <Layout>
         {/* User Status Bar */}
         <div className="mb-4 flex items-center justify-between rounded-lg border bg-card p-4 shadow-sm">
@@ -215,9 +185,9 @@ if ((window as any).HappyLead) {
             <div>
               <div className="font-medium">
                 {isLoggedIn ? (
-                  <span className="text-green-600">✓ Logged In: {loginName}</span>
+                  <span className="text-green-600">✓ Logged In: {loginName || loginEmail}</span>
                 ) : (
-                  <span className="text-muted-foreground">Anonymous User</span>
+                  <span className="text-muted-foreground">Anonymous Visitor</span>
                 )}
               </div>
               {isLoggedIn && (
@@ -237,20 +207,20 @@ if ((window as any).HappyLead) {
                 <DialogTrigger asChild>
                   <Button size="sm" className="gap-2">
                     <LogIn className="h-4 w-4" />
-                    Simulate Login
+                    Login
                   </Button>
                 </DialogTrigger>
                 <DialogContent>
                   <DialogHeader>
-                    <DialogTitle>Simulate User Login</DialogTitle>
+                    <DialogTitle>Login to Demo App</DialogTitle>
                     <DialogDescription>
-                      This simulates a user logging into your app. HappyLead will detect these credentials.
+                      Simulate logging in as a user. HappyLead will auto-detect the login.
                     </DialogDescription>
                   </DialogHeader>
 
                   <div className="space-y-4 py-4">
                     <div>
-                      <Label htmlFor="email">Email * (Required)</Label>
+                      <Label htmlFor="email">Email Address *</Label>
                       <Input
                         id="email"
                         type="email"
@@ -259,7 +229,7 @@ if ((window as any).HappyLead) {
                         placeholder="user@company.com"
                       />
                       <p className="mt-1 text-xs text-muted-foreground">
-                        This is what HappyLead uses to look you up in Salesforce
+                        Try: allen.martin@feve.com (exists in Salesforce)
                       </p>
                     </div>
 
@@ -269,11 +239,8 @@ if ((window as any).HappyLead) {
                         id="name"
                         value={loginName}
                         onChange={(e) => setLoginName(e.target.value)}
-                        placeholder="John Smith"
+                        placeholder="John Doe"
                       />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        For personalization only (e.g., "Hi John!")
-                      </p>
                     </div>
 
                     <div>
@@ -284,25 +251,21 @@ if ((window as any).HappyLead) {
                         onChange={(e) => setLoginCompany(e.target.value)}
                         placeholder="Acme Corp"
                       />
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        For display only - Salesforce has the real data
-                      </p>
                     </div>
 
                     <div className="rounded-md bg-blue-50 p-3 text-sm text-blue-800">
                       <strong>What happens:</strong>
                       <ul className="mt-1 ml-4 list-disc text-xs space-y-1">
-                        <li>Sets window.currentUser (simulating your app)</li>
-                        <li>Calls HappyLead.identify() with email</li>
-                        <li>Widget looks up email in Salesforce</li>
-                        <li>Gets company size, industry, trial status, etc.</li>
-                        <li>Matches against playbook rules</li>
+                        <li>Sets window.currentUser (simulating your app's login)</li>
+                        <li>Page reloads so HappyLead can detect the user</li>
+                        <li>Widget automatically enriches with Salesforce data</li>
+                        <li>Playbooks evaluate and fire based on rules</li>
                       </ul>
                     </div>
                   </div>
 
                   <Button onClick={simulateLogin} disabled={!loginEmail}>
-                    Login as This User
+                    Login
                   </Button>
                 </DialogContent>
               </Dialog>
@@ -310,7 +273,7 @@ if ((window as any).HappyLead) {
           </div>
         </div>
 
-        {/* Test Triggers Dropdown */}
+        {/* Behavior Simulator */}
         <div className="mb-4 flex justify-end gap-2">
           <Button
             variant="outline"
@@ -326,12 +289,12 @@ if ((window as any).HappyLead) {
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="gap-2">
                 <MessageCircle className="h-4 w-4" />
-                Simulate Behavior
+                Simulate User Behavior
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
-                🎯 SIMULATE VISITOR ACTIONS
+                🎯 VISITOR ACTIONS
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
 
@@ -356,7 +319,7 @@ if ((window as any).HappyLead) {
               <DropdownMenuItem onClick={simulateDashboardTime}>
                 <Clock className="mr-2 h-4 w-4" />
                 <div className="flex flex-col">
-                  <span>Spend 60s on Dashboard</span>
+                  <span>Spend Time on Dashboard</span>
                   <span className="text-xs text-muted-foreground">
                     Current: {dashboardTime}s
                   </span>
@@ -365,17 +328,12 @@ if ((window as any).HappyLead) {
 
               <DropdownMenuSeparator />
               <DropdownMenuLabel className="text-xs font-semibold text-muted-foreground">
-                🔧 TESTING TOOLS
+                🔧 DEBUGGING
               </DropdownMenuLabel>
-
-              <DropdownMenuItem onClick={() => trackEvent('clicked_pricing', { plan: 'enterprise' })}>
-                <Activity className="mr-2 h-4 w-4" />
-                Track Custom Event
-              </DropdownMenuItem>
 
               <DropdownMenuItem onClick={viewBehaviorData}>
                 <Eye className="mr-2 h-4 w-4" />
-                View Behavior Data
+                View Widget Data
               </DropdownMenuItem>
 
               <DropdownMenuItem onClick={resetBehavior} className="text-orange-600">
@@ -395,7 +353,7 @@ if ((window as any).HappyLead) {
         {showDebug && behaviorData && (
           <div className="mb-6 rounded-lg border bg-card p-4 shadow-sm">
             <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-semibold">Behavior Data</h3>
+              <h3 className="font-semibold">HappyLead Widget Data</h3>
               <Button size="sm" variant="ghost" onClick={() => setShowDebug(false)}>
                 ✕
               </Button>
@@ -424,10 +382,30 @@ if ((window as any).HappyLead) {
               </div>
 
               <div>
+                <div className="mb-1 font-medium text-muted-foreground">Salesforce Data:</div>
+                <pre className="rounded bg-muted p-2 text-xs overflow-x-auto">
+                  {JSON.stringify({
+                    company: behaviorData.sf_company || 'Not enriched',
+                    industry: behaviorData.sf_industry || 'Not enriched',
+                    employees: behaviorData.sf_employees || 'Not enriched'
+                  }, null, 2)}
+                </pre>
+              </div>
+
+              <div>
                 <div className="mb-1 font-medium text-muted-foreground">Session Start:</div>
                 <span className="text-muted-foreground">
                   {new Date(behaviorData.sessionStart).toLocaleTimeString()}
                 </span>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-md bg-slate-50 p-3 text-xs">
+              <strong>Console Commands:</strong>
+              <div className="mt-2 space-y-1 font-mono">
+                <div>• HappyLead.isUserIdentified()</div>
+                <div>• HappyLead.getBehaviorData()</div>
+                <div>• window.currentUser</div>
               </div>
             </div>
           </div>
