@@ -31,30 +31,41 @@ const Index = () => {
 
   // Login simulator state
   const [showLoginSim, setShowLoginSim] = useState(false);
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginEmail, setLoginEmail] = useState('allen.martin@feve.com');
   const [loginName, setLoginName] = useState('');
   const [loginCompany, setLoginCompany] = useState('');
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
-  // Check if already "logged in"
+  // Check if already "logged in" from localStorage
   useEffect(() => {
-    const currentUser = (window as any).currentUser;
-    if (currentUser?.email) {
-      setIsLoggedIn(true);
-      setLoginEmail(currentUser.email);
-      setLoginName(currentUser.name || '');
-      setLoginCompany(currentUser.company || '');
+    const savedUser = localStorage.getItem('demo_user');
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        (window as any).currentUser = user;
+        setIsLoggedIn(true);
+        setLoginEmail(user.email);
+        setLoginName(user.name || '');
+        setLoginCompany(user.company || '');
+      } catch (e) {
+        console.error('Failed to parse saved user', e);
+      }
     }
   }, []);
 
-  // Simulate login - just set the global user object, widget does the rest
+  // Simulate login - save to localStorage to persist across refreshes
   const simulateLogin = () => {
-    // Set global user (like a real app would)
-    (window as any).currentUser = {
+    const userData = {
       email: loginEmail,
       name: loginName,
       company: loginCompany
     };
+
+    // Save to localStorage for persistence
+    localStorage.setItem('demo_user', JSON.stringify(userData));
+
+    // Set global user (like a real app would)
+    (window as any).currentUser = userData;
 
     setIsLoggedIn(true);
     setShowLoginSim(false);
@@ -65,9 +76,12 @@ const Index = () => {
 
   // Simulate logout
   const simulateLogout = () => {
+    // Remove from localStorage
+    localStorage.removeItem('demo_user');
+
     (window as any).currentUser = null;
     setIsLoggedIn(false);
-    setLoginEmail('');
+    setLoginEmail('allen.martin@feve.com');
     setLoginName('');
     setLoginCompany('');
 
@@ -257,6 +271,7 @@ const Index = () => {
                       <strong>What happens:</strong>
                       <ul className="mt-1 ml-4 list-disc text-xs space-y-1">
                         <li>Sets window.currentUser (simulating your app's login)</li>
+                        <li>Saves to localStorage (persists across page refreshes)</li>
                         <li>Page reloads so HappyLead can detect the user</li>
                         <li>Widget automatically enriches with Salesforce data</li>
                         <li>Playbooks evaluate and fire based on rules</li>
