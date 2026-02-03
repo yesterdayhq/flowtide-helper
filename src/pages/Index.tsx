@@ -180,8 +180,8 @@ const Index = () => {
           content="Realistic demo environment showing HappyLead widget integration"
         />
         {/* HappyLead Widget - Production Snippet */}
-        <script data-account-id="8c175179-8972-415e-a07f-1614786e558c">
-          {`!function(){if(window.HappyLeadWidget?.initialized)return;var u=window.currentUser||window.user||(window.analytics?.user?.())||(window.Intercom?.user)||null;window.HappyLeadConfig={accountId:"8c175179-8972-415e-a07f-1614786e558c",user:u?.email?{email:u.email,name:u.name||u.full_name||(u.firstName&&u.lastName?u.firstName+" "+u.lastName:"")||"",company:u.company||u.companyName||""}:null};var s=document.createElement("script");s.src="https://app.gethappylead.com/widget.js?v="+Date.now();s.async=1;s.setAttribute("data-account-id","8c175179-8972-415e-a07f-1614786e558c");document.head.appendChild(s)}();`}
+        <script data-account-id="aedfe5e8-4e92-4d2b-a109-b88c3876d415">
+        {`!function(){if(window.HappyLeadWidget?.initialized)return;var u=window.currentUser||window.user||(window.analytics?.user?.())||(window.Intercom?.user)||null;window.HappyLeadConfig={accountId:"aedfe5e8-4e92-4d2b-a109-b88c3876d415",user:u?.email?{email:u.email,name:u.name||u.full_name||(u.firstName&&u.lastName?u.firstName+" "+u.lastName:"")||"",company:u.company||u.companyName||""}:null};var s=document.createElement("script");s.src="https://app.gethappylead.com/widget.js?v="+Date.now();s.async=1;s.setAttribute("data-account-id","aedfe5e8-4e92-4d2b-a109-b88c3876d415");document.head.appendChild(s)}();`}
         </script>
         <style>{`
           [data-lovable-edit-button],
