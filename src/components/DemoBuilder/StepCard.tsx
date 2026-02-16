@@ -139,13 +139,15 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
 
   const saveAnnotation = () => {
     const wasEmpty = !step.annotation;
+    const hasChanged = annotation !== step.annotation;
+
     onUpdate({ annotation });
     setIsEditing(false);
     trackAnnotationInteraction();
 
     if (wasEmpty && annotation) {
       analytics.annotationAdded(demo?.id || '', step.id);
-    } else if (!wasEmpty && annotation !== step.annotation) {
+    } else if (!wasEmpty && hasChanged && annotation) {
       analytics.annotationEdited(demo?.id || '', step.id);
     }
   };
