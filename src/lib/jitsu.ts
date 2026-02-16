@@ -1,4 +1,4 @@
-const HAPPYLEAD_WEBHOOK = 'https://nwnjmxzipkvuhqhtskux.supabase.co/functions/v1/ingest-product-events';
+const HAPPYLEAD_WEBHOOK = 'https://nwnjmxzipkvuhqhtskux.supabase.co/functions/v1/product-events-testonly';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im53bmpteHppcGt2dWhxaHRza3V4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjczOTA5ODUsImV4cCI6MjA4Mjk2Njk4NX0.rVAh2MO3FU7fkHEDTj9JSefrKu3_8NIFKs3p-_-f2Fo';
 
 export const jitsu = {
