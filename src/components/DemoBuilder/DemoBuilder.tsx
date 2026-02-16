@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { jitsu } from '@/lib/jitsu';
 import {
   DndContext,
   closestCenter,
@@ -58,14 +59,23 @@ export function DemoBuilder() {
 
   const handleAddStep = () => {
     addStep(null, '');
+
+    jitsu.track('demo_step_added', {
+      demo_id: demo?.id,
+      step_count: (demo?.steps.length || 0) + 1,
+    });
   };
 
   const handlePublish = async () => {
     setIsPublishing(true);
-    // Simulate publishing delay
     await new Promise((resolve) => setTimeout(resolve, 1500));
     publishDemo();
-    setIsPublishing(false)
+    setIsPublishing(false);
+
+    jitsu.track('demo_published', {
+      demo_id: demo?.id,
+      step_count: demo?.steps.length || 0,
+    });
   };
 
   const handlePreviewClick = () => {
