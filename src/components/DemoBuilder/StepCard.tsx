@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { useApp } from '@/context/AppContext';
+import { analytics } from '@/lib/jitsu';
 
 interface StepCardProps {
   step: DemoStep;
@@ -20,8 +21,8 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
   const [annotation, setAnnotation] = useState(step.annotation);
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const { triggerError, triggerStuck } = useApp();
-  
+  const { triggerError, triggerStuck, demo } = useApp();
+
   // Stuck detection state
   const [dwellStart, setDwellStart] = useState<Date | null>(null);
   const [hasMouseMoved, setHasMouseMoved] = useState(false);
@@ -55,7 +56,7 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
   // Track clicks on this card for rage click detection
   const handleCardClick = () => {
     if (hasTriggeredStuck.current) return;
-    
+
     setClickCount(prev => {
       const newCount = prev + 1;
       // Rage clicks - 6+ clicks while card is empty
@@ -72,7 +73,7 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
     if (!hasMouseMoved) {
       setHasMouseMoved(true);
     }
-    
+
     // Check dwell time (20+ seconds with mouse movement on empty card)
     if (dwellStart && !hasTriggeredStuck.current && !step.imageUrl) {
       const dwellTime = new Date().getTime() - dwellStart.getTime();
@@ -84,7 +85,6 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
   };
 
   const handleImageUpload = (file: File) => {
-    // Simulate occasional upload failure for demo
     if (Math.random() < 0.15) {
       triggerError('upload', file.name);
       return;
@@ -93,7 +93,7 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
     const reader = new FileReader();
     reader.onload = (e) => {
       onUpdate({ imageUrl: e.target?.result as string });
-      // Reset stuck detection on successful upload
+      analytics.stepImageChanged(demo?.id || '', step.id);
       hasTriggeredStuck.current = false;
     };
     reader.readAsDataURL(file);
@@ -138,15 +138,20 @@ export function StepCard({ step, onUpdate, onRemove }: StepCardProps) {
   };
 
   const saveAnnotation = () => {
+    const wasEmpty = !step.annotation;
     onUpdate({ annotation });
     setIsEditing(false);
-    // Track that they saved (interaction)
     trackAnnotationInteraction();
+
+    if (wasEmpty && annotation) {
+      analytics.annotationAdded(demo?.id || '', step.id);
+    } else if (!wasEmpty && annotation !== step.annotation) {
+      analytics.annotationEdited(demo?.id || '', step.id);
+    }
   };
 
   const handleRemove = () => {
-    // Note: The actual deletion tracking happens automatically in StuckDetection.tsx
-    // via the useEffect that watches demo?.steps.length
+    analytics.stepRemoved(demo?.id || '', (demo?.steps.length || 1) - 1, step.id);
     onRemove();
   };
 

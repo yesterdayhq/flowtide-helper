@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, Copy, Link, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { analytics } from '@/lib/jitsu';
 import {
   Dialog,
   DialogContent,
@@ -20,17 +21,17 @@ interface ShareDialogProps {
 
 export function ShareDialog({ isOpen, onClose, demoId, demoTitle }: ShareDialogProps) {
   const [copied, setCopied] = useState(false);
-  
+
   const shareUrl = `https://demo.flowtide.app/${demoId}`;
-  
+
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(shareUrl);
       setCopied(true);
-      
-      // Cancel the share flow timer when user copies the link
+      analytics.demoShared(demoId);
+
       (window as any).__onShareCopy?.();
-      
+
       toast({
         title: 'Link copied!',
         description: 'Share link has been copied to your clipboard.',
@@ -54,12 +55,12 @@ export function ShareDialog({ isOpen, onClose, demoId, demoTitle }: ShareDialogP
             Share your demo
           </DialogTitle>
         </DialogHeader>
-        
+
         <div className="space-y-4 pt-2">
           <p className="text-sm text-muted-foreground">
             Anyone with this link can view "{demoTitle}"
           </p>
-          
+
           <div className="flex gap-2">
             <Input
               readOnly

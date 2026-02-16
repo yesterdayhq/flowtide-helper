@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { jitsu } from '@/lib/jitsu';
+import { analytics } from '@/lib/jitsu';
 import {
   DndContext,
   closestCenter,
@@ -59,11 +59,7 @@ export function DemoBuilder() {
 
   const handleAddStep = () => {
     addStep(null, '');
-
-    jitsu.track('demo_step_added', {
-      demo_id: demo?.id,
-      step_count: (demo?.steps.length || 0) + 1,
-    });
+    analytics.stepAdded(demo?.id || '', (demo?.steps.length || 0) + 1);
   };
 
   const handlePublish = async () => {
@@ -72,17 +68,14 @@ export function DemoBuilder() {
     publishDemo();
     setIsPublishing(false);
 
-    jitsu.track('demo_published', {
-      demo_id: demo?.id,
-      step_count: demo?.steps.length || 0,
-    });
+    analytics.demoPublished(demo?.id || '', demo?.steps.length || 0);
   };
 
   const handlePreviewClick = () => {
-    // Track preview open for stuck detection
     if ((window as any).__trackPreviewOpen) {
       (window as any).__trackPreviewOpen();
     }
+    analytics.demoPreviewed(demo?.id || '', demo?.steps.length || 0);
     setIsPreviewOpen(true);
   };
 
